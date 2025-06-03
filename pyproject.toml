@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "insightfinder"
+version = "0.1.0"
+description = "A Python SDK for interfacing with the InsightFinder API."
+authors = [{ name = "InsightFinderAI", email = "support@insightfinder.com" }]
+license = { file = "LICENSE" }
+readme = "README.md"
+homepage = "https://insightfinder.com/"
+repository = "https://github.com/insightfinder/ifai-sdk"
+keywords = ["insightfinder", "sdk", "api"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools]
+packages = ["insightfinder"]
