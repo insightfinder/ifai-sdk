@@ -1,0 +1,1 @@
+CHATBOT_API_URL = "https://ai.insightfinder.com/api/external/v1/chatbot/stream-with-type"
