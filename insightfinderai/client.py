@@ -2,7 +2,7 @@ import requests
 import json
 import logging
 from types import SimpleNamespace
-from .config import CHATBOT_API_URL
+from .config import DEFAULT_CHATBOT_API_URL, CHATBOT_ENDPOINT
 
 logger = logging.getLogger(__name__)
 
@@ -12,20 +12,32 @@ class Client:
     Handles sending prompts to the API and streaming responses.
     """
 
-    def __init__(self, username, api_key):
+    def __init__(self, username, api_key, url=None):
         """
         Initialize the client with user credentials.
 
         Args:
             username (str): The username for authentication.
             api_key (str): The API key for authentication.
+            url (str, optional): The base URL for the API. Defaults to https://ai.insightfinder.com (DEFAULT_CHATBOT_API_URL).
         """
+        
         if not username:
             raise ValueError("Username cannot be empty.")
         if not api_key:
             raise ValueError("API key cannot be empty.")
+        
         self.username = username
         self.api_key = api_key
+        
+        # Set base URL with default fallback
+        base_url = url if url else DEFAULT_CHATBOT_API_URL
+        
+        # Ensure proper URL formatting and append the API endpoint
+        if base_url.endswith('/'):
+            self.api_url = base_url + CHATBOT_ENDPOINT
+        else:
+            self.api_url = base_url + "/" + CHATBOT_ENDPOINT
 
     def chat(self, prompt, model_version=None, user_created_model_name=None, model_id_type=None):
         """
@@ -73,7 +85,7 @@ class Client:
         
         # Send POST request to the chatbot API with streaming enabled
         response = requests.post(
-            CHATBOT_API_URL,
+            self.api_url,
             headers=headers,
             json=data,
             stream=True

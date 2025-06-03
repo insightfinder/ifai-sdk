@@ -14,7 +14,7 @@ This is a Python SDK for interfacing with the InsightFinder API. It provides a s
 You can install the SDK using pip:
 
 ```
-pip install insightfinder
+pip install insightfinderai
 ```
 
 ## Usage
@@ -22,12 +22,13 @@ pip install insightfinder
 Here is a basic example of how to use the SDK:
 
 ```python
-from insightfinder import Client
+from insightfinderai import Client
 
 # Create a client instance
 client = Client(
     username="your_username",  # Replace with your actual username
-    api_key="your_api_key"    # Replace with your actual API key
+    api_key="your_api_key",    # Replace with your actual API key
+    url="https://ai.insightfinder.com"  # Optional, can be omitted to use default URL which is "https://ai.insightfinder.com"
 )
 
 # Required parameters for sending a request

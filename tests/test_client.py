@@ -1,5 +1,5 @@
 import unittest
-from insightfinder.client import Client
+from insightfinderai.client import Client
 from dotenv import load_dotenv
 import os
 
