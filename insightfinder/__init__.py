@@ -1,4 +1,4 @@
-from .client import LLMLabsClient
+from .client import Client
 
 __version__ = "0.1.0"
-__all__ = ['LLMLabsClient', '__version__']
+__all__ = ['Client', '__version__']

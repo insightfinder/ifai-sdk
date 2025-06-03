@@ -1,11 +1,11 @@
 import unittest
-from insightfinder.client import LLMLabsClient
+from insightfinder.client import Client
 from dotenv import load_dotenv
 import os
 
-class TestLLMLabsClient(unittest.TestCase):
+class TestClient(unittest.TestCase):
     """
-    Unit tests for the LLMLabsClient class.
+    Unit tests for the Client class.
     Tests the chat functionality with various scenarios.
     """
 
@@ -16,7 +16,7 @@ class TestLLMLabsClient(unittest.TestCase):
         load_dotenv()
         self.username = os.getenv("INSIGHTFINDER_USERNAME")
         self.api_key = os.getenv("INSIGHTFINDER_API_KEY")
-        self.client = LLMLabsClient(self.username, self.api_key)
+        self.client = Client(self.username, self.api_key)
 
     def test_chat_valid(self):
         """

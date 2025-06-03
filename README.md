@@ -22,10 +22,10 @@ pip install insightfinder
 Here is a basic example of how to use the SDK:
 
 ```python
-from insightfinder import LLMLabsClient
+from insightfinder import Client
 
 # Create a client instance
-client = LLMLabsClient(
+client = Client(
     username="your_username",  # Replace with your actual username
     api_key="your_api_key"    # Replace with your actual API key
 )
@@ -72,7 +72,7 @@ Evaluations: [
 
 ## API Details
 
-### LLMLabsClient
+### Client
 
 - **chat(prompt, model_version, user_created_model_name=None, model_id_type=None)**:  
   Sends a request to the InsightFinder API with the specified parameters.  
@@ -82,10 +82,6 @@ Evaluations: [
   - `model`: The model used for generation.
   - `raw_chunks`: List of raw response chunks from the API.
   - `evaluations`: List of evaluation results (if available).
-
-### Auth
-
-- **set_credentials(username, api_key)**: Sets the username and API key for authentication.
 
 ## License
 

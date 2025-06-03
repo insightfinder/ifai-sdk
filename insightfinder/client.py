@@ -6,7 +6,7 @@ from .config import CHATBOT_API_URL
 
 logger = logging.getLogger(__name__)
 
-class LLMLabsClient:
+class Client:
     """
     Client for interacting with the LLMLabs InsightFinder chatbot API.
     Handles sending prompts to the API and streaming responses.
