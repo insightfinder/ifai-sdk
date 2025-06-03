@@ -1,6 +1,9 @@
 import requests
 import json
 from types import SimpleNamespace
+import logging
+
+logger = logging.getLogger(__name__)
 
 class LLMLabsClient:
     def __init__(self, auth):
@@ -86,7 +89,7 @@ class LLMLabsClient:
                         except Exception:
                             pass  # ignore invalid JSON
         except requests.exceptions.ChunkedEncodingError as e:
-            print(f"Stream broken: {e}")
+            logger.error(f"Stream broken: {e}")
 
         return SimpleNamespace(
             response=stitched_response,
