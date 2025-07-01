@@ -1,4 +1,4 @@
-# InsightFinder
+# InsightFinder AI SDK
 
 This is a Python SDK for interfacing with the InsightFinder API. It provides a simple and efficient way to send requests to the API and handle responses.
 
