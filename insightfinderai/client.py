@@ -1,116 +1,259 @@
 import requests
 import json
 import logging
+import uuid
+import time
+import os
+from typing import List, Optional, Union, Callable, Any
 from types import SimpleNamespace
-from .config import DEFAULT_CHATBOT_API_URL, CHATBOT_ENDPOINT
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from .config import DEFAULT_API_URL, CHATBOT_ENDPOINT, EVALUATION_ENDPOINT, SAFETY_EVALUATION_ENDPOINT
 
 logger = logging.getLogger(__name__)
 
+class EvaluationResult:
+    """Represents an evaluation result with formatted display."""
+    
+    def __init__(self, evaluation_data: dict, trace_id: Optional[str] = None, prompt: Optional[str] = None, response: Optional[str] = None):
+        self.evaluations = evaluation_data.get('evaluations', [])
+        self.trace_id = trace_id or evaluation_data.get('traceId', '')
+        self.prompt = prompt
+        self.response = response
+    
+    def __str__(self):
+        """Format evaluation results for clean display."""
+        result = "[Evaluation Results]\n"
+        result += f"Trace ID : {self.trace_id}\n"
+        result += "\n"
+        
+        # Always show prompt and response if available
+        if self.prompt:
+            result += "Prompt:\n"
+            result += f">> {self.prompt}\n"
+            result += "\n"
+        
+        if self.response:
+            result += "Response:\n"
+            result += f">> {self.response}\n"
+            result += "\n"
+        
+        # Show evaluations if available
+        if self.evaluations:
+            result += "Evaluations:\n"
+            result += "-" * 40 + "\n"
+            
+            for i, eval_item in enumerate(self.evaluations, 1):
+                eval_type = eval_item.get('evaluationType', 'Unknown')
+                score = eval_item.get('score', 0)
+                explanation = eval_item.get('explanation', 'No explanation provided')
+                
+                result += f"{i}. Type        : {eval_type}\n"
+                result += f"   Score       : {score}\n"
+                result += f"   Explanation : {explanation}\n"
+                if i < len(self.evaluations):
+                    result += "\n"
+        else:
+            result += "Evaluations:\n"
+            result += "-" * 40 + "\n"
+            result += "PASSED"
+        
+        return result
+
+    def format_for_chat(self):
+        """Format evaluation results for display within chat response (no prompt/response repetition)."""
+        if not self.evaluations:
+            return "Evaluations:\n" + "-" * 40 + "\nPASSED"
+        
+        result = "Evaluations:\n"
+        result += "-" * 40 + "\n"
+        
+        for i, eval_item in enumerate(self.evaluations, 1):
+            eval_type = eval_item.get('evaluationType', 'Unknown')
+            score = eval_item.get('score', 0)
+            explanation = eval_item.get('explanation', 'No explanation provided')
+            
+            result += f"{i}. Type        : {eval_type}\n"
+            result += f"   Score       : {score}\n"
+            result += f"   Explanation : {explanation}\n"
+            if i < len(self.evaluations):
+                result += "\n"
+        
+        return result
+
+class ChatResponse:
+    """Represents a chat response with formatted display."""
+    
+    def __init__(self, response: str, prompt: Optional[str] = None, evaluations: Optional[List[dict]] = None, trace_id: Optional[str] = None, model: Optional[str] = None, raw_chunks: Optional[List] = None, enable_evaluations: bool = False):
+        self.response = response
+        self.prompt = prompt
+        self.evaluations = EvaluationResult({'evaluations': evaluations or []}, trace_id, prompt, response) if evaluations else None
+        self.enable_evaluations = enable_evaluations
+        self.trace_id = trace_id
+        self.model = model
+        self.raw_chunks = raw_chunks or []
+    
+    def __str__(self):
+        """Format chat response for clean, user-friendly display."""
+        result = "[Chat Response]\n"
+        result += f"Trace ID : {self.trace_id or 'N/A'}\n"
+        result += f"Model    : {self.model or 'Unknown'}\n"
+        result += "\n"
+        
+        if self.prompt:
+            result += "Prompt:\n"
+            result += f">> {self.prompt}\n"
+            result += "\n"
+        
+        result += "Response:\n"
+        result += f">> {self.response}\n"
+        
+        # Show evaluations if they exist and enable_evaluations was enabled
+        if self.evaluations and self.evaluations.evaluations:
+            result += "\n" + self.evaluations.format_for_chat()
+        elif self.enable_evaluations:
+            # Show PASSED when evaluations are enabled but no evaluations were returned
+            result += "\n\nEvaluations:\n"
+            result += "-" * 40 + "\n"
+            result += "PASSED"
+        
+        return result
+
 class Client:
     """
-    Client for interacting with the LLMLabs InsightFinder chatbot API.
-    Handles sending prompts to the API and streaming responses.
+    User-friendly client for InsightFinder AI SDK.
+    
+    This client provides easy-to-use methods for:
+    - Single and batch chatting with streaming support
+    - Evaluation of prompts and responses
+    - Safety evaluation for prompts
     """
 
-    def __init__(self, username, api_key, url=None):
+    def __init__(self, project_name: str, session_name: Optional[str] = None, url: Optional[str] = None, username: Optional[str] = None, api_key: Optional[str] = None, enable_evaluations: bool = False):
         """
-        Initialize the client with user credentials.
+        Initialize the client with user credentials and project settings.
 
         Args:
-            username (str): The username for authentication.
-            api_key (str): The API key for authentication.
-            url (str, optional): The base URL for the API. Defaults to https://ai.insightfinder.com (DEFAULT_CHATBOT_API_URL).
+            project_name (str): The project name for evaluations (required for evaluation operations)
+            session_name (str, optional): Session name for chat requests (required for chat operations, defaults to project_name)
+            url (str, optional): Custom API URL (defaults to https://ai.insightfinder.com)
+            username (str, optional): Username for authentication (can be set via INSIGHTFINDER_USERNAME env var)
+            api_key (str, optional): API key for authentication (can be set via INSIGHTFINDER_API_KEY env var)
+            enable_evaluations (bool): Whether to display evaluation and safety results in chat responses (default: False)
+        
+        Note:
+            - session_name is REQUIRED for chat operations (chat, batch_chat)
+            - project_name is REQUIRED for evaluation operations (evaluate, batch_evaluate, safety_evaluation)
+            - Both are needed if you plan to use both chat and evaluation features
+        
+        Environment Variables:
+            INSIGHTFINDER_USERNAME: Username for authentication
+            INSIGHTFINDER_API_KEY: API key for authentication
+        
+        Example:
+            # Using parameters
+            client = Client(
+                project_name="my_ai_project",
+                session_name="chat_session_1", 
+                username="john_doe",
+                api_key="your_api_key_here",
+                enable_evaluations=True
+            )
+            
+            # Using environment variables
+            # export INSIGHTFINDER_USERNAME="john_doe"
+            # export INSIGHTFINDER_API_KEY="your_api_key_here"
+            client = Client(
+                project_name="my_ai_project", 
+                session_name="chat_session_1",
+                enable_evaluations=True
+            )
         """
         
-        if not username:
-            raise ValueError("Username cannot be empty.")
-        if not api_key:
-            raise ValueError("API key cannot be empty.")
+        # Get credentials from parameters or environment variables
+        self.username = username or os.getenv('INSIGHTFINDER_USERNAME')
+        self.api_key = api_key or os.getenv('INSIGHTFINDER_API_KEY')
         
-        self.username = username
-        self.api_key = api_key
+        if not self.username:
+            raise ValueError("Username must be provided either as parameter or INSIGHTFINDER_USERNAME environment variable")
+        if not self.api_key:
+            raise ValueError("API key must be provided either as parameter or INSIGHTFINDER_API_KEY environment variable")
+        if not project_name:
+            raise ValueError("Project name cannot be empty")
+        
+        self.project_name = project_name
+        self.session_name = session_name or project_name
+        self.enable_evaluations = enable_evaluations
         
         # Set base URL with default fallback
-        base_url = url if url else DEFAULT_CHATBOT_API_URL
-        
-        # Ensure proper URL formatting and append the API endpoint
-        if base_url.endswith('/'):
-            self.api_url = base_url + CHATBOT_ENDPOINT
-        else:
-            self.api_url = base_url + "/" + CHATBOT_ENDPOINT
+        self.base_url = url if url else DEFAULT_API_URL
+        if not self.base_url.endswith('/'):
+            self.base_url += '/'
+            
+        # Construct API URLs
+        self.chat_url = self.base_url + CHATBOT_ENDPOINT
+        self.evaluation_url = self.base_url + EVALUATION_ENDPOINT  
+        self.safety_url = self.base_url + SAFETY_EVALUATION_ENDPOINT
 
-    def chat(self, prompt, model_version=None, user_created_model_name=None, model_id_type=None):
-        """
-        Send a prompt to the chatbot API and stream the response.
-
-        Args:
-            prompt (str): The prompt to send to the chatbot.
-            model_version (str): The version of the model to use.
-            user_created_model_name (str): The name of the user-created model.
-            model_id_type (str): The type of model ID.
-
-        Returns:
-            SimpleNamespace: An object containing the stitched response, evaluations,
-                             trace ID, model, and raw response chunks.
-
-        Raises:
-            ValueError: If required parameters are missing or if the API returns an error.
-        """
-        # Validate required parameters
-        if not prompt:
-            raise ValueError("Prompt cannot be empty.")
-
-        if model_version is None:
-            raise ValueError("Model version must be specified.")
-
-        if model_id_type is None:
-            raise ValueError("Model ID type must be specified.")
-        
-        if user_created_model_name is None:
-            raise ValueError("User created model name must be specified.")
-
-        # Prepare request headers for authentication
-        headers = {
+    def _get_headers(self) -> dict:
+        """Get authentication headers."""
+        return {
             'X-Api-Key': self.api_key,
-            'X-User-Name': self.username
+            'X-User-Name': self.username,
+            'Content-Type': 'application/json'
         }
+
+    def _generate_trace_id(self) -> str:
+        """Generate a unique trace ID."""
+        return str(uuid.uuid4())
+
+    def _get_timestamp(self) -> int:
+        """Get current timestamp in milliseconds."""
+        return int(time.time() * 1000)
+
+    def chat(self, prompt: str, stream: bool = False) -> ChatResponse:
+        """
+        Send a single chat message and get response.
         
-        # Prepare request payload
+        Args:
+            prompt (str): Your message/question
+            stream (bool): Whether to show streaming response (default: False)
+        
+        Returns:
+            ChatResponse: Response object with formatted display including evaluations (if enabled)
+            
+        Example:
+            response = client.chat("What is the capital of France?")
+            print(response)  # Clean formatted output with evaluations included
+        """
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+            
+        # Prepare request data
         data = {
             'prompt': prompt,
-            'modelVersion': model_version,
-            'userCreatedModelName': user_created_model_name,
-            'modelIdType': model_id_type
+            'userCreatedModelName': self.session_name,
         }
         
-        # Send POST request to the chatbot API with streaming enabled
-        response = requests.post(
-            self.api_url,
-            headers=headers,
-            json=data,
-            stream=True
-        )
-
-        # Handle HTTP response codes
-        if 200 <= response.status_code < 300:
-            # Success, continue processing
-            pass
-        elif 400 <= response.status_code < 500:
-            raise ValueError(f"Client error {response.status_code}: {response.text}")
-        elif 500 <= response.status_code < 600:
-            raise ValueError(f"Server error {response.status_code}: {response.text}")
-        else:
-            raise ValueError(f"Unexpected status code {response.status_code}: {response.text}")
-
-        # Initialize variables for processing the streamed response
-        results = []
-        stitched_response = ""
-        evaluations = None
-        trace_id = None
-        model = None
-
         try:
-            # Iterate over streamed lines from the response
+            response = requests.post(
+                self.chat_url,
+                headers=self._get_headers(),
+                json=data,
+                stream=True
+            )
+            
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"API error {response.status_code}: {response.text}")
+            
+            # Process streaming response
+            results = []
+            stitched_response = ""
+            evaluations = None
+            trace_id = None
+            model = None
+            evaluation_buffer = ""  # Buffer to accumulate evaluation JSON
+            in_evaluation_block = False
+            
             for line in response.iter_lines(decode_unicode=True):    
                 if line and line.startswith('data:'):
                     json_part = line[5:].strip()
@@ -118,37 +261,279 @@ class Client:
                         try:
                             chunk = json.loads(json_part)
                             results.append(chunk)
-                            # Extract model and trace_id if present
+                            
+                            # Extract metadata
                             if not model and "model" in chunk:
                                 model = chunk["model"]
                             if "id" in chunk:
                                 trace_id = chunk["id"]
-                            # Handle choices in the chunk
+                                
+                            # Process content
                             if "choices" in chunk:
                                 for choice in chunk["choices"]:
                                     delta = choice.get("delta", {})
                                     content = delta.get("content", "")
-                                    # If content looks like an evaluation JSON, parse it
+                                    
+                                    # Check if we're starting an evaluation block
                                     if content.startswith("{") and "evaluations" in content:
+                                        in_evaluation_block = True
+                                        evaluation_buffer = content
+                                    elif in_evaluation_block:
+                                        # We're in an evaluation block, accumulate content
+                                        evaluation_buffer += content
+                                        
+                                        # Try to parse the accumulated JSON
                                         try:
-                                            eval_obj = json.loads(content)
+                                            eval_obj = json.loads(evaluation_buffer)
                                             evaluations = eval_obj.get("evaluations")
-                                            # Optionally, update trace_id if present in eval_obj
                                             trace_id = eval_obj.get("traceId", trace_id)
-                                        except Exception:
+                                            in_evaluation_block = False
+                                            evaluation_buffer = ""
+                                        except json.JSONDecodeError:
+                                            # Not complete JSON yet, continue accumulating
                                             pass
                                     else:
+                                        # Regular response content
                                         stitched_response += content
-                        except Exception:
-                            pass  # ignore invalid JSON
-        except requests.exceptions.ChunkedEncodingError as e:
-            logger.error(f"Stream broken: {e}")
+                                        if stream and content:
+                                            print(content, end='', flush=True)
+                        except:
+                            pass
+            
+            # Create response object
+            chat_response = ChatResponse(
+                response=stitched_response,
+                prompt=prompt,
+                evaluations=evaluations if self.enable_evaluations else None,
+                trace_id=trace_id,
+                model=model,
+                raw_chunks=results,
+                enable_evaluations=self.enable_evaluations
+            )
+            
+            return chat_response
+            
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Request failed: {str(e)}")
 
-        # Return the processed response and metadata as a SimpleNamespace
-        return SimpleNamespace(
-            response=stitched_response,
-            evaluations=evaluations,
-            trace_id=trace_id,
-            model=model,
-            raw_chunks=results
-        )
+    def batch_chat(self, prompts: List[str], stream: bool = False, max_workers: int = 3) -> List[ChatResponse]:
+        """
+        Send multiple chat messages in parallel.
+        
+        Args:
+            prompts (List[str]): List of messages/questions
+            stream (bool): Whether to show progress updates (default: False)
+            max_workers (int): Number of parallel requests (default: 3)
+        
+        Returns:
+            List[ChatResponse]: List of response objects with evaluations (if enabled)
+            
+        Example:
+            prompts = ["Hello!", "What's the weather?", "Tell me a joke"]
+            responses = client.batch_chat(prompts)
+            for i, response in enumerate(responses):
+                print(f"Response {i+1}: {response}")
+        """
+        if not prompts:
+            raise ValueError("Prompts list cannot be empty")
+        
+        def process_single_chat(prompt_data):
+            idx, prompt = prompt_data
+            return idx, self.chat(prompt, stream=False)
+        
+        # Execute in parallel
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_prompt = {
+                executor.submit(process_single_chat, (i, prompt)): i 
+                for i, prompt in enumerate(prompts)
+            }
+            
+            # Collect results in order
+            results: List[Optional[ChatResponse]] = [None] * len(prompts)
+            for future in as_completed(future_to_prompt):
+                try:
+                    idx, response = future.result()
+                    results[idx] = response
+                except Exception as e:
+                    idx = future_to_prompt[future]
+                    results[idx] = None
+        
+        return [r for r in results if r is not None]
+
+    def evaluate(self, prompt: str, response: str, trace_id: Optional[str] = None) -> EvaluationResult:
+        """
+        Evaluate a prompt and response pair.
+        
+        Args:
+            prompt (str): The original prompt/question
+            response (str): The AI response to evaluate
+            trace_id (str, optional): Custom trace ID (auto-generated if not provided)
+        
+        Returns:
+            EvaluationResult: Evaluation results with formatted display
+            
+        Example:
+            result = client.evaluate("What's 2+2?", "The answer is 4")
+            print(result)  # Shows beautiful evaluation breakdown
+        """
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+        if not response.strip():
+            raise ValueError("Response cannot be empty")
+            
+        trace_id = trace_id or self._generate_trace_id()
+        
+        data = {
+            "projectName": self.project_name,
+            "traceId": trace_id,
+            "prompt": prompt,
+            "response": response,
+            "timestamp": self._get_timestamp()
+        }
+        
+        try:
+            api_response = requests.post(
+                self.evaluation_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            
+            if not (200 <= api_response.status_code < 300):
+                raise ValueError(f"Evaluation API error {api_response.status_code}: {api_response.text}")
+            
+            result_data = api_response.json()
+            return EvaluationResult(result_data, trace_id, prompt, response)
+            
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Evaluation request failed: {str(e)}")
+
+    def batch_evaluate(self, prompt_response_pairs: List[tuple], max_workers: int = 3) -> List[EvaluationResult]:
+        """
+        Evaluate multiple prompt-response pairs in parallel.
+        
+        Args:
+            prompt_response_pairs (List[tuple]): List of (prompt, response) tuples
+            max_workers (int): Number of parallel requests (default: 3)
+        
+        Returns:
+            List[EvaluationResult]: List of evaluation results
+            
+        Example:
+            pairs = [
+                ("What's 2+2?", "4"),
+                ("Capital of France?", "Paris"),
+                ("Tell me a joke", "Why did the chicken cross the road?")
+            ]
+            results = client.batch_evaluate(pairs)
+            for result in results:
+                print(result)
+        """
+        if not prompt_response_pairs:
+            raise ValueError("Prompt-response pairs list cannot be empty")
+        
+        def process_single_evaluation(pair_data):
+            idx, (prompt, response) = pair_data
+            return idx, self.evaluate(prompt, response)
+        
+        results: List[Optional[EvaluationResult]] = [None] * len(prompt_response_pairs)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_pair = {
+                executor.submit(process_single_evaluation, (i, pair)): i 
+                for i, pair in enumerate(prompt_response_pairs)
+            }
+            
+            for future in as_completed(future_to_pair):
+                try:
+                    idx, result = future.result()
+                    results[idx] = result
+                except Exception as e:
+                    idx = future_to_pair[future]
+                    results[idx] = None
+        
+        return [r for r in results if r is not None]
+
+    def safety_evaluation(self, prompt: str, trace_id: Optional[str] = None) -> EvaluationResult:
+        """
+        Evaluate the safety of a prompt.
+        
+        Args:
+            prompt (str): The prompt to evaluate for safety
+            trace_id (str, optional): Custom trace ID (auto-generated if not provided)
+        
+        Returns:
+            EvaluationResult: Safety evaluation results
+            
+        Example:
+            result = client.safety_evaluation("What is your credit card number?")
+            print(result)  # Shows safety evaluation with PII/PHI detection
+        """
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+            
+        trace_id = trace_id or self._generate_trace_id()
+        
+        data = {
+            "projectName": self.project_name,
+            "traceId": trace_id,
+            "prompt": prompt,
+            "timestamp": self._get_timestamp()
+        }
+        
+        try:
+            api_response = requests.post(
+                self.safety_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            
+            if not (200 <= api_response.status_code < 300):
+                raise ValueError(f"Safety API error {api_response.status_code}: {api_response.text}")
+            
+            result_data = api_response.json()
+            return EvaluationResult(result_data, trace_id, prompt, None)
+            
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Safety evaluation request failed: {str(e)}")
+
+    def batch_safety_evaluation(self, prompts: List[str], max_workers: int = 3) -> List[EvaluationResult]:
+        """
+        Evaluate the safety of multiple prompts in parallel.
+        
+        Args:
+            prompts (List[str]): List of prompts to evaluate
+            max_workers (int): Number of parallel requests (default: 3)
+        
+        Returns:
+            List[EvaluationResult]: List of safety evaluation results
+            
+        Example:
+            prompts = ["Hello", "What's your SSN?", "Tell me about AI"]
+            results = client.batch_safety_evaluation(prompts)
+            for result in results:
+                print(result)
+        """
+        if not prompts:
+            raise ValueError("Prompts list cannot be empty")
+        
+        def process_single_safety(prompt_data):
+            idx, prompt = prompt_data
+            return idx, self.safety_evaluation(prompt)
+        
+        results: List[Optional[EvaluationResult]] = [None] * len(prompts)
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_prompt = {
+                executor.submit(process_single_safety, (i, prompt)): i 
+                for i, prompt in enumerate(prompts)
+            }
+            
+            for future in as_completed(future_to_prompt):
+                try:
+                    idx, result = future.result()
+                    results[idx] = result
+                except Exception as e:
+                    idx = future_to_prompt[future]
+                    results[idx] = None
+        
+        return [r for r in results if r is not None]
