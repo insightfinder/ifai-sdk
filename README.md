@@ -4,7 +4,7 @@ A super user-friendly Python SDK for the InsightFinder AI platform. Designed for
 
 ## Features
 
-- **Simple Setup**: Just provide your credentials and project name
+- **Simple Setup**: Just provide your credentials and session name
 - **Chat & Streaming**: Single chat with real-time streaming responses
 - **Batch Processing**: Handle multiple requests efficiently 
 - **Smart Evaluations**: Automatic bias, hallucination, and relevance analysis
@@ -13,9 +13,7 @@ A super user-friendly Python SDK for the InsightFinder AI platform. Designed for
 - **Parallel Processing**: Fast batch operations with customizable workers
 
 ### Requirements Overview
-- **For Chat Operations**: `session_name` is required
-- **For Evaluation Operations**: `project_name` is required
-- **For Both**: Both parameters needed if using chat and evaluation features together
+- **For Chat and Evaluation Operations**: `session_name` is required
 
 ## Installation
 
@@ -32,20 +30,18 @@ from insightfinderai import Client
 
 # Method 1: Provide credentials directly
 client = Client(
-    project_name="my_ai_project",     # Required: Project name for evaluations
-    session_name="chat_session_1",    # Required: Session name for chat operations
-    username="your_username",         # Your username
-    api_key="your_api_key",          # Your API key  
-    enable_evaluations=True           # Optional: show evaluation results (default: False)
+    session_name="llm-eval-test",             # Session name - also used for project name generation
+    username="your_username",                 # Your username
+    api_key="your_api_key",                  # Your API key  
+    enable_chat_evaluation=True               # Optional: show evaluation results (default: True)
 )
 
 # Method 2: Use environment variables for credentials
 # export INSIGHTFINDER_USERNAME="your_username"
 # export INSIGHTFINDER_API_KEY="your_api_key"
 client = Client(
-    project_name="my_ai_project",     # Required for evaluations
-    session_name="my_chat_session",   # Required for chat operations
-    enable_evaluations=False          # Clean output without evaluations
+    session_name="llm-eval-test",             # Session name
+    enable_chat_evaluation=False              # Clean output without evaluations
 )
 ```
 
@@ -171,8 +167,7 @@ export INSIGHTFINDER_API_KEY="your_api_key"
 ```python
 # No need to provide credentials in code
 client = Client(
-    project_name="my_project",        # Required for evaluations
-    session_name="my_session"         # Required for chat operations
+    session_name="llm-eval-test"              # Session name - also used for project auto-generation
 )
 ```
 
@@ -180,18 +175,16 @@ client = Client(
 ```python
 # Show evaluations and safety results in chat responses
 client = Client(
-    project_name="project_for_evals",    # Required for evaluations
-    session_name="session_for_chat",     # Required for chat
-    enable_evaluations=True
+    session_name="llm-eval-test",              # Session name for chat and auto project generation
+    enable_chat_evaluation=True
 )
 response = client.chat("Hello!")
 # Output includes: response + evaluations + safety results
 
 # Hide evaluations for clean output
 client = Client(
-    project_name="project_for_evals",    # Required for evaluations
-    session_name="session_for_chat",     # Required for chat
-    enable_evaluations=False
+    session_name="llm-eval-test",              # Session name for chat and auto project generation
+    enable_chat_evaluation=False
 )
 response = client.chat("Hello!")
 # Output includes: response only (clean and minimal)
@@ -251,8 +244,7 @@ except ValueError as e:
 ```python
 # Use a custom API endpoint
 client = Client(
-    project_name="project",           # Required for evaluations
-    session_name="session",           # Required for chat operations
+    session_name="llm-eval-test",              # Session name for chat and auto project generation
     username="user",
     api_key="key", 
     url="https://your-custom-api.com"
@@ -264,7 +256,6 @@ client = Client(
 1. **Batch Processing**: Use batch methods for multiple requests - they're much faster!
 2. **Stream Control**: Turn off streaming for batch operations to reduce noise
 3. **Safety First**: Keep safety evaluation enabled for production use
-4. **Project Organization**: Use descriptive project and session names for better tracking
 
 ## Requirements
 
