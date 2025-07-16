@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "insightfinderai"
-version = "0.1.0"
+version = "2.1.0"
 authors = [
     { name = "InsightFinderAI", email = "support@insightfinder.com" },
 ]
@@ -16,6 +16,7 @@ dependencies = [
 ]
 keywords = ["insightfinderai", "sdk", "api"]
 license = "Apache-2.0"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -38,5 +39,4 @@ test = ["pytest", "coverage"]
 dev = ["pre-commit", "black", "mypy"]
 
 [tool.setuptools]
-packages = ["insightfinderai"]
-license-files = []
+packages = {find = {}}
