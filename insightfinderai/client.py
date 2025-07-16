@@ -4,21 +4,101 @@ import logging
 import uuid
 import time
 import os
-from typing import List, Optional, Union, Callable, Any
+from typing import List, Optional, Union, Callable, Any, Dict
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import DEFAULT_API_URL, CHATBOT_ENDPOINT, EVALUATION_ENDPOINT, SAFETY_EVALUATION_ENDPOINT, TRACE_PROJECT_NAME_ENDPOINT
 
 logger = logging.getLogger(__name__)
 
+class ConversationHistory:
+    """Manages conversation history for chat sessions."""
+    
+    def __init__(self):
+        self.messages: List[Dict[str, str]] = []
+    
+    def add_message(self, role: str, content: str):
+        """Add a message to the conversation history."""
+        self.messages.append({"role": role, "content": content})
+    
+    def add_user_message(self, content: str):
+        """Add a user message to the conversation."""
+        self.add_message("user", content)
+    
+    def add_assistant_message(self, content: str):
+        """Add an assistant message to the conversation."""
+        self.add_message("assistant", content)
+    
+    def get_messages(self) -> List[Dict[str, str]]:
+        """Get all messages in the conversation."""
+        return self.messages.copy()
+    
+    def clear(self):
+        """Clear the conversation history."""
+        self.messages.clear()
+    
+    def to_string(self) -> str:
+        """Convert conversation history to the string format expected by the API."""
+        if not self.messages:
+            return ""
+        
+        # Convert to JSON string format
+        return ', '.join([json.dumps(msg, separators=(',', ':')) for msg in self.messages])
+
 class EvaluationResult:
-    """Represents an evaluation result with formatted display."""
+    """Represents an evaluation result with formatted display and object access."""
     
     def __init__(self, evaluation_data: dict, trace_id: Optional[str] = None, prompt: Optional[str] = None, response: Optional[str] = None):
         self.evaluations = evaluation_data.get('evaluations', [])
         self.trace_id = trace_id or evaluation_data.get('traceId', '')
         self.prompt = prompt
         self.response = response
+        self.is_passed = not self.evaluations  # True if no evaluations (empty list = passed)
+        self.summary = self._generate_summary()
+    
+    def _generate_summary(self) -> Dict[str, Any]:
+        """Generate summary statistics for evaluations."""
+        # For single evaluation, total prompts is always 1
+        total_prompts = 1
+        
+        # If no evaluations, it's a pass
+        if not self.evaluations:
+            return {
+                'total_prompts': total_prompts,
+                'passed_evaluations': 1,
+                'failed_evaluations': 0,
+                'top_failed_evaluation': None
+            }
+        
+        # If evaluations exist, it's a fail (regardless of scores)
+        passed_evaluations = 0
+        failed_evaluations = 1
+        
+        # Count evaluation types for top failed evaluation
+        eval_type_counts = {}
+        for eval_item in self.evaluations:
+            eval_type = eval_item.get('evaluationType', 'Unknown')
+            eval_type_counts[eval_type] = eval_type_counts.get(eval_type, 0) + 1
+        
+        # Find top failed evaluation type(s)
+        top_failed_evaluation = None
+        if eval_type_counts:
+            max_count = max(eval_type_counts.values())
+            top_failed_types = [eval_type for eval_type, count in eval_type_counts.items() if count == max_count]
+            top_failed_evaluation = top_failed_types if len(top_failed_types) > 1 else top_failed_types[0]
+        
+        return {
+            'total_prompts': total_prompts,
+            'passed_evaluations': passed_evaluations,
+            'failed_evaluations': failed_evaluations,
+            'top_failed_evaluation': top_failed_evaluation
+        }
+    
+    def print(self) -> str:
+        """Print and return evaluation results for clean display."""
+        result = self.__str__()
+        print(result)
+        return result
     
     def __str__(self):
         """Format evaluation results for clean display."""
@@ -81,16 +161,38 @@ class EvaluationResult:
         return result
 
 class ChatResponse:
-    """Represents a chat response with formatted display."""
+    """Represents a chat response with formatted display and object access."""
     
-    def __init__(self, response: str, prompt: Optional[str] = None, evaluations: Optional[List[dict]] = None, trace_id: Optional[str] = None, model: Optional[str] = None, raw_chunks: Optional[List] = None, enable_evaluations: bool = False):
+    def __init__(self, response: str, prompt: Optional[Union[str, List[Dict[str, str]]]] = None, evaluations: Optional[List[dict]] = None, trace_id: Optional[str] = None, model: Optional[str] = None, raw_chunks: Optional[List] = None, enable_evaluations: bool = False, history: Optional[List[Dict[str, str]]] = None):
         self.response = response
         self.prompt = prompt
-        self.evaluations = EvaluationResult({'evaluations': evaluations or []}, trace_id, prompt, response) if evaluations else None
+        self.history = history or []
+        # Convert prompt to string for evaluation result if it's a list
+        prompt_str = self._format_prompt_for_display() if isinstance(prompt, list) else prompt
+        self.evaluations = EvaluationResult({'evaluations': evaluations or []}, trace_id, prompt_str, response) if evaluations else None
         self.enable_evaluations = enable_evaluations
         self.trace_id = trace_id
         self.model = model
         self.raw_chunks = raw_chunks or []
+        self.is_passed = self.evaluations is None or self.evaluations.is_passed
+    
+    def _format_prompt_for_display(self) -> str:
+        """Format conversation history for display."""
+        if not isinstance(self.prompt, list):
+            return str(self.prompt) if self.prompt else ""
+        
+        formatted = []
+        for msg in self.prompt:
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            formatted.append(f"[{role.upper()}] {content}")
+        return "\n".join(formatted)
+    
+    def print(self) -> str:
+        """Print and return chat response for clean, user-friendly display."""
+        result = self.__str__()
+        print(result)
+        return result
     
     def __str__(self):
         """Format chat response for clean, user-friendly display."""
@@ -101,7 +203,14 @@ class ChatResponse:
         
         if self.prompt:
             result += "Prompt:\n"
-            result += f">> {self.prompt}\n"
+            if isinstance(self.prompt, list):
+                # Format conversation history nicely
+                for i, msg in enumerate(self.prompt):
+                    role = msg.get('role', 'unknown').upper()
+                    content = msg.get('content', '')
+                    result += f">> [{role}] {content}\n"
+            else:
+                result += f">> {self.prompt}\n"
             result += "\n"
         
         result += "Response:\n"
@@ -118,18 +227,153 @@ class ChatResponse:
         
         return result
 
+class BatchEvaluationResult:
+    """Represents batch evaluation results with summary statistics and object access."""
+    
+    def __init__(self, evaluation_results: List[EvaluationResult]):
+        self.evaluations = evaluation_results
+        self.response = evaluation_results  # Alias for consistency
+        self.summary = self._generate_summary()
+        self.is_passed = all(eval_result.is_passed for eval_result in self.evaluations)
+    
+    def _generate_summary(self) -> Dict[str, Any]:
+        """Generate summary statistics for batch evaluations."""
+        if not self.evaluations:
+            return {
+                'total_prompts': 0,
+                'passed_evaluations': 0,
+                'failed_evaluations': 0,
+                'top_failed_evaluation': None
+            }
+        
+        total_prompts = len(self.evaluations)
+        passed_evaluations = 0
+        failed_evaluations = 0
+        
+        # Count evaluation types across all failed prompts
+        eval_type_counts = {}
+        
+        for eval_result in self.evaluations:
+            if not eval_result.evaluations:
+                # Empty evaluations = PASS
+                passed_evaluations += 1
+            else:
+                # Has evaluations = FAIL (regardless of scores)
+                failed_evaluations += 1
+                
+                # Count evaluation types for this failed prompt
+                for eval_item in eval_result.evaluations:
+                    eval_type = eval_item.get('evaluationType', 'Unknown')
+                    eval_type_counts[eval_type] = eval_type_counts.get(eval_type, 0) + 1
+        
+        # Find top failed evaluation type(s)
+        top_failed_evaluation = None
+        if eval_type_counts:
+            max_count = max(eval_type_counts.values())
+            top_failed_types = [eval_type for eval_type, count in eval_type_counts.items() if count == max_count]
+            top_failed_evaluation = top_failed_types if len(top_failed_types) > 1 else top_failed_types[0]
+        
+        return {
+            'total_prompts': total_prompts,
+            'passed_evaluations': passed_evaluations,
+            'failed_evaluations': failed_evaluations,
+            'top_failed_evaluation': top_failed_evaluation
+        }
+    
+    @property
+    def prompt(self) -> List[str]:
+        """Get all prompts from the batch evaluations."""
+        return [eval_result.prompt for eval_result in self.evaluations if eval_result.prompt]
+    
+    def print(self) -> str:
+        """Print and return batch evaluation results."""
+        result = self.__str__()
+        print(result)
+        return result
+    
+    def __str__(self):
+        """Format batch evaluation results for display."""
+        result = "[Batch Evaluation Results]\n"
+        result += f"Total Prompts     : {self.summary['total_prompts']}\n"
+        result += f"Passed Evaluations: {self.summary['passed_evaluations']}\n"
+        result += f"Failed Evaluations: {self.summary['failed_evaluations']}\n"
+        
+        if self.summary['top_failed_evaluation']:
+            top_failed = self.summary['top_failed_evaluation']
+            if isinstance(top_failed, list):
+                result += f"Top Failed        : {', '.join(top_failed)}\n"
+            else:
+                result += f"Top Failed        : {top_failed}\n"
+        
+        result += "\n" + "="*60 + "\n\n"
+        
+        for i, eval_result in enumerate(self.evaluations, 1):
+            result += f"--- Evaluation {i} ---\n"
+            result += str(eval_result) + "\n\n"
+        
+        return result
+
+class BatchChatResult:
+    """Represents batch chat results with object access."""
+    
+    def __init__(self, chat_responses: List[ChatResponse]):
+        self.response = chat_responses
+        self.evaluations = [resp.evaluations for resp in chat_responses if resp.evaluations]
+        self.history = []  # Batch chat typically doesn't maintain conversation history
+        self.summary = self._generate_summary()
+        self.is_passed = all(resp.is_passed for resp in chat_responses)
+    
+    def _generate_summary(self) -> Dict[str, Any]:
+        """Generate summary statistics for batch chat."""
+        total_chats = len(self.response)
+        successful_chats = sum(1 for resp in self.response if resp.response)
+        
+        return {
+            'total_chats': total_chats,
+            'successful_chats': successful_chats,
+            'failed_chats': total_chats - successful_chats
+        }
+    
+    @property
+    def prompt(self) -> List[Union[str, List[Dict[str, str]]]]:
+        """Get all prompts from the batch chat."""
+        return [resp.prompt for resp in self.response if resp.prompt]
+    
+    def print(self) -> str:
+        """Print and return batch chat results."""
+        result = self.__str__()
+        print(result)
+        return result
+    
+    def __str__(self):
+        """Format batch chat results for display."""
+        result = "[Batch Chat Results]\n"
+        result += f"Total Chats    : {self.summary['total_chats']}\n"
+        result += f"Successful     : {self.summary['successful_chats']}\n"
+        result += f"Failed         : {self.summary['failed_chats']}\n"
+        result += "\n" + "="*60 + "\n\n"
+        
+        for i, chat_response in enumerate(self.response, 1):
+            result += f"--- Response {i} ---\n"
+            result += str(chat_response) + "\n\n"
+        
+        return result
+
 class Client:
     """
     User-friendly client for InsightFinder AI SDK.
     
     This client provides easy-to-use methods for:
-    - Single and batch chatting with streaming support
+    - Single and batch chatting with streaming support and conversation history
     - Evaluation of prompts and responses with automatic project name generation
     - Safety evaluation for prompts
     
     The client automatically generates project names for evaluations by calling the API
     with the session_name and appending "-Prompt" to the result.
     """
+    
+    # Maximum context window size in characters before trimming old messages
+    MAX_CONTEXT_WINDOW_SIZE = 8000
 
     def __init__(self, session_name: str, url: Optional[str] = None, username: Optional[str] = None, api_key: Optional[str] = None, enable_chat_evaluation: bool = True):
         """
@@ -193,6 +437,9 @@ class Client:
         self.safety_url = self.base_url + SAFETY_EVALUATION_ENDPOINT
         self.trace_project_name_url = self.base_url + TRACE_PROJECT_NAME_ENDPOINT
         
+        # Initialize conversation history
+        self.conversation = ConversationHistory()
+        
         # Generate project name dynamically
         self.project_name = self._get_project_name()
 
@@ -212,15 +459,36 @@ class Client:
         """Get current timestamp in milliseconds."""
         return int(time.time() * 1000)
 
-    def _get_project_name(self) -> str:
+    def _trim_context_if_needed(self):
+        """Trim conversation history if it exceeds MAX_CONTEXT_WINDOW_SIZE."""
+        while self.conversation.messages:
+            # Calculate current context size
+            current_context = self.conversation.to_string()
+            if len(current_context) <= self.MAX_CONTEXT_WINDOW_SIZE:
+                break
+            
+            # Remove the oldest message (first message)
+            self.conversation.messages.pop(0)
+            
+            # If we only have one message left and it's still too long, we have a problem
+            if len(self.conversation.messages) <= 1:
+                break
+
+    def _get_project_name(self, session_name: Optional[str] = None) -> str:
         """
         Get the project name by calling the trace project name API and appending '-Prompt'.
+        
+        Args:
+            session_name (Optional[str]): Session name to use. If None, uses the default session name.
         
         Returns:
             str: The generated project name for evaluations
         """
+        # Use provided session_name or fall back to default
+        effective_session_name = session_name or self.session_name
+        
         data = {
-            "userCreatedModelName": self.session_name
+            "userCreatedModelName": effective_session_name
         }
         
         try:
@@ -242,28 +510,96 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Failed to get trace project name: {str(e)}")
 
-    def chat(self, prompt: str, stream: bool = False) -> ChatResponse:
+    def chat(self, messages: Union[str, List[Dict[str, str]]], stream: bool = False, chat_history: bool = False, session_name: Optional[str] = None) -> ChatResponse:
         """
-        Send a single chat message and get response.
+        Send a chat message and get response. Supports both simple strings and conversation history.
         
         Args:
-            prompt (str): Your message/question
+            messages (Union[str, List[Dict[str, str]]]): Your message/question or conversation history
+                - String: Simple prompt like "What is the capital of France?"
+                - List: Conversation history like [{"role": "user", "content": "Hello"}, {"role": "system", "content": "Hi there!"}]
             stream (bool): Whether to show streaming response (default: False)
+            chat_history (bool): Whether to store this conversation in client history for future context (default: False)
+            session_name (Optional[str]): Session name to use for this request. If None, uses the default session name.
         
         Returns:
             ChatResponse: Response object with formatted display including evaluations (if enabled)
             
-        Example:
+        Examples:
+            # Simple chat without storing history
             response = client.chat("What is the capital of France?")
-            print(response)  # Clean formatted output with evaluations included
-        """
-        if not prompt.strip():
-            raise ValueError("Prompt cannot be empty")
             
-        # Prepare request data
+            # Chat with conversation storage enabled
+            client.chat("Hello", chat_history=True)  # Stored
+            client.chat("How are you?", chat_history=True)  # Uses previous context
+            
+            # Chat with custom session name
+            response = client.chat("Hello", session_name="custom-session")
+            
+            # Provide explicit conversation history
+            response = client.chat([
+                {"role": "user", "content": "knock knock."},
+                {"role": "system", "content": "Who's there?"},
+                {"role": "user", "content": "Orange."}
+            ])
+        """
+        # Handle different input types
+        if isinstance(messages, str):
+            if not messages.strip():
+                raise ValueError("Prompt cannot be empty")
+            
+            # If store=True and we have conversation history, add to existing conversation
+            if chat_history and self.conversation.messages:
+                # Add user message to existing conversation
+                self.conversation.add_user_message(messages)
+                # Trim context if needed
+                self._trim_context_if_needed()
+                prompt_for_api = self.conversation.to_string()
+                prompt_for_display = messages  # Current prompt only
+            else:
+                # Simple string prompt (no context from history)
+                prompt_for_api = f'{{"role": "user", "content": "{messages}"}}'
+                prompt_for_display = messages
+                
+                # If store=True, start new conversation
+                if chat_history:
+                    self.conversation.clear()  # Start fresh
+                    self.conversation.add_user_message(messages)
+                    
+        elif isinstance(messages, list):
+            if not messages:
+                raise ValueError("Messages list cannot be empty")
+            
+            # Validate message format
+            for msg in messages:
+                if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
+                    raise ValueError("Each message must be a dict with 'role' and 'content' keys")
+            
+            # Convert to string format for API (as per your existing test format)
+            prompt_for_api = ', '.join([json.dumps(msg, separators=(',', ':')) for msg in messages])
+            
+            # Extract the last user message as the current prompt for display
+            last_user_message = None
+            for msg in reversed(messages):
+                if msg.get('role') == 'user':
+                    last_user_message = msg.get('content', '')
+                    break
+            prompt_for_display = last_user_message or messages[-1].get('content', '') if messages else ''
+            
+            # If store=True, replace conversation history with provided messages
+            if chat_history:
+                self.conversation.messages = messages.copy()
+                self._trim_context_if_needed()
+        else:
+            raise ValueError("Messages must be either a string or a list of message dictionaries")
+            
+        # Use provided session_name or fall back to default
+        effective_session_name = session_name or self.session_name
+        
+        # Prepare request data (using 'prompt' as per the original API)
         data = {
-            'prompt': prompt,
-            'userCreatedModelName': self.session_name,
+            'prompt': prompt_for_api,
+            'userCreatedModelName': effective_session_name,
         }
         
         try:
@@ -332,15 +668,22 @@ class Client:
                         except:
                             pass
             
+            # Save system response to history if store=True
+            if chat_history and stitched_response:
+                self.conversation.add_assistant_message(stitched_response)
+                # Trim context again after adding response if needed
+                self._trim_context_if_needed()
+            
             # Create response object
             chat_response = ChatResponse(
                 response=stitched_response,
-                prompt=prompt,
+                prompt=prompt_for_display,
                 evaluations=evaluations if self.enable_evaluations else None,
                 trace_id=trace_id,
                 model=model,
                 raw_chunks=results,
-                enable_evaluations=self.enable_evaluations
+                enable_evaluations=self.enable_evaluations,
+                history=self.conversation.get_messages() if chat_history else []
             )
             
             return chat_response
@@ -348,51 +691,308 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Request failed: {str(e)}")
 
-    def batch_chat(self, prompts: List[str], stream: bool = False, max_workers: int = 3) -> List[ChatResponse]:
+    def get_context_info(self) -> Dict[str, Any]:
         """
-        Send multiple chat messages in parallel.
+        Get information about the current conversation context.
+        
+        Returns:
+            Dict[str, Any]: Context information including size, message count, and whether it's near the limit
+        """
+        current_context = self.conversation.to_string()
+        message_count = len(self.conversation.messages)
+        context_size = len(current_context)
+        
+        return {
+            "message_count": message_count,
+            "context_size_chars": context_size,
+            "max_context_size": self.MAX_CONTEXT_WINDOW_SIZE,
+            "remaining_capacity": max(0, self.MAX_CONTEXT_WINDOW_SIZE - context_size),
+            "usage_percentage": round((context_size / self.MAX_CONTEXT_WINDOW_SIZE) * 100, 1),
+            "near_limit": context_size > (self.MAX_CONTEXT_WINDOW_SIZE * 0.8),  # 80% threshold
+            "context_preview": current_context[:200] + "..." if len(current_context) > 200 else current_context
+        }
+
+    # Conversation History Management Methods
+    
+    def get_conversation_history(self) -> List[Dict[str, str]]:
+        """
+        Get the current conversation history.
+        
+        Returns:
+            List[Dict[str, str]]: List of messages in the conversation
+        """
+        return self.conversation.get_messages()
+    
+    def clear_chat_history(self):
+        """Clear the conversation history to start fresh."""
+        self.conversation.clear()
+    
+    def add_to_conversation(self, role: str, content: str):
+        """
+        Manually add a message to the conversation history.
+        
+        Args:
+            role (str): Either "user" or "system"
+            content (str): The message content
+        """
+        self.conversation.add_message(role, content)
+    
+    def set_chat_history(self, data: Union[List[Dict[str, str]], Dict[str, Any]]):
+        """
+        Set the conversation history from either a list of messages or loaded chat history data.
+        
+        Args:
+            data (Union[List[Dict[str, str]], Dict[str, Any]]): Either:
+                - List of message dictionaries with 'role' and 'content' keys
+                - Full loaded chat history data (will extract 'conversation' key)
+        
+        Examples:
+            # Set from message list
+            client.set_chat_history([
+                {"role": "user", "content": "Hello"},
+                {"role": "system", "content": "Hi there!"}
+            ])
+            
+            # Set from loaded data
+            data = client.load_chat_history("my_conversation.json")
+            client.set_chat_history(data)  # Automatically uses data["conversation"]
+            
+            # Or explicitly use conversation
+            client.set_chat_history(data["conversation"])
+        """
+        # Handle different input types
+        if isinstance(data, list):
+            # Direct list of messages
+            messages = data
+        elif isinstance(data, dict):
+            # Check if it's loaded chat history data with 'conversation' key
+            if 'conversation' in data:
+                messages = data['conversation']
+            else:
+                # Assume it's a single message dict, wrap in list
+                messages = [data]
+        else:
+            raise ValueError("Data must be either a list of messages or a dict with 'conversation' key")
+        
+        # Validate message format
+        if not isinstance(messages, list):
+            raise ValueError("Messages must be a list")
+            
+        for i, msg in enumerate(messages):
+            if not isinstance(msg, dict):
+                raise ValueError(f"Message {i} must be a dict")
+            if 'role' not in msg or 'content' not in msg:
+                raise ValueError(f"Message {i} must have 'role' and 'content' keys")
+        
+        self.conversation.messages = messages.copy()
+
+    def retrieve_chat_history(self) -> List[Dict[str, str]]:
+        """
+        Retrieve the current conversation chat history.
+        
+        This is an alias for get_conversation_history() with a more intuitive name.
+        
+        Returns:
+            List[Dict[str, str]]: List of messages in the conversation history
+            
+        Example:
+            history = client.retrieve_chat_history()
+            for msg in history:
+                print(f"[{msg['role'].upper()}] {msg['content']}")
+        """
+        return self.conversation.get_messages()
+
+    def save_chat_history(self, filename: Optional[str] = None) -> str:
+        """
+        Save the current conversation chat history to a JSON file.
+        
+        Args:
+            filename (Optional[str]): The filename to save to. If None, generates a unique filename.
+        
+        Returns:
+            str: The actual filename used for saving
+            
+        Example:
+            # Save with custom filename
+            saved_file = client.save_chat_history("my_conversation.json")
+            
+            # Save with auto-generated filename
+            saved_file = client.save_chat_history()
+            print(f"Conversation saved to: {saved_file}")
+        """
+        import json
+        from datetime import datetime
+        import os
+        
+        # Get current conversation history
+        history = self.retrieve_chat_history()
+        
+        # Generate filename if not provided
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_safe = "".join(c for c in self.session_name if c.isalnum() or c in ('-', '_'))
+            filename = f"chat_history_{session_safe}_{timestamp}.json"
+        
+        # Ensure filename has .json extension
+        if not filename.endswith('.json'):
+            filename += '.json'
+        
+        # Create the data structure to save
+        save_data = {
+            "session_name": self.session_name,
+            "timestamp": datetime.now().isoformat(),
+            "message_count": len(history),
+            "conversation": history
+        }
+        
+        # Save to file in current working directory
+        filepath = os.path.join(os.getcwd(), filename)
+        
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(save_data, f, indent=2, ensure_ascii=False)
+            
+            return filename
+            
+        except Exception as e:
+            raise ValueError(f"Failed to save chat history to {filename}: {str(e)}")
+
+    def load_chat_history(self, filename: str) -> Dict[str, Any]:
+        """
+        Load conversation chat history from a JSON file.
+        
+        Args:
+            filename (str): The filename to load from
+        
+        Returns:
+            Dict[str, Any]: The loaded chat history data including metadata
+            
+        Example:
+            # Load and restore conversation
+            data = client.load_chat_history("my_conversation.json")
+            client.set_conversation_history(data["conversation"])
+            print(f"Loaded {data['message_count']} messages from {data['timestamp']}")
+        """
+        import json
+        import os
+        
+        # Add .json extension if not present
+        if not filename.endswith('.json'):
+            filename += '.json'
+        
+        # Try to find the file in current directory first
+        filepath = os.path.join(os.getcwd(), filename)
+        if not os.path.exists(filepath):
+            # If not found, try the filename as-is (might be full path)
+            filepath = filename
+        
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Validate the data structure
+            if not isinstance(data, dict) or 'conversation' not in data:
+                raise ValueError("Invalid chat history file format")
+            
+            return data
+            
+        except FileNotFoundError:
+            raise ValueError(f"Chat history file not found: {filename}")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in chat history file: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Failed to load chat history from {filename}: {str(e)}")
+
+    def batch_chat(self, prompts: List[str], stream: bool = False, max_workers: int = 3, session_name: Optional[str] = None, enable_history: bool = False) -> BatchChatResult:
+        """
+        Send multiple chat messages in parallel or sequentially with conversation history.
         
         Args:
             prompts (List[str]): List of messages/questions
             stream (bool): Whether to show progress updates (default: False)
-            max_workers (int): Number of parallel requests (default: 3)
+            max_workers (int): Number of parallel requests (default: 3, ignored when enable_history=True)
+            session_name (Optional[str]): Session name to use for all requests. If None, uses the default session name.
+            enable_history (bool): Whether to process prompts sequentially with conversation history (default: False)
+                - If True: Processes prompts one by one, maintaining conversation context between them
+                - If False: Processes prompts in parallel with no shared context
         
         Returns:
-            List[ChatResponse]: List of response objects with evaluations (if enabled)
+            BatchChatResult: Batch chat result object with summary statistics
             
         Example:
+            # Parallel processing (default)
             prompts = ["Hello!", "What's the weather?", "Tell me a joke"]
             responses = client.batch_chat(prompts)
-            for i, response in enumerate(responses):
-                print(f"Response {i+1}: {response}")
+            
+            # Sequential processing with conversation history
+            prompts = ["Hello!", "What's my name?", "Tell me about our conversation"]
+            responses = client.batch_chat(prompts, enable_history=True)
+            
+            # With custom session name
+            responses = client.batch_chat(prompts, session_name="custom-session")
         """
         if not prompts:
             raise ValueError("Prompts list cannot be empty")
         
-        def process_single_chat(prompt_data):
-            idx, prompt = prompt_data
-            return idx, self.chat(prompt, stream=False)
-        
-        # Execute in parallel
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_prompt = {
-                executor.submit(process_single_chat, (i, prompt)): i 
-                for i, prompt in enumerate(prompts)
-            }
+        if enable_history:
+            # Sequential processing with conversation history
+            sequential_results: List[ChatResponse] = []
             
-            # Collect results in order
-            results: List[Optional[ChatResponse]] = [None] * len(prompts)
-            for future in as_completed(future_to_prompt):
-                try:
-                    idx, response = future.result()
-                    results[idx] = response
-                except Exception as e:
-                    idx = future_to_prompt[future]
-                    results[idx] = None
+            # Save current conversation state
+            original_conversation = self.conversation.get_messages().copy()
+            
+            try:
+                # Clear conversation to start fresh for batch
+                self.conversation.clear()
+                
+                for i, prompt in enumerate(prompts):
+                    if stream:
+                        print(f"\n--- Processing prompt {i+1}/{len(prompts)} ---")
+                        print(f"Prompt: {prompt}")
+                    
+                    # Process with conversation history enabled
+                    response = self.chat(prompt, stream=stream, chat_history=True, session_name=session_name)
+                    sequential_results.append(response)
+                    
+                    # Check context size and trim if needed
+                    context_info = self.get_context_info()
+                    if context_info['near_limit']:
+                        if stream:
+                            print(f"Context approaching limit ({context_info['usage_percentage']}%), trimming...")
+                        self._trim_context_if_needed()
+                
+                return BatchChatResult(sequential_results)
+                
+            finally:
+                # Restore original conversation state
+                self.conversation.messages = original_conversation
         
-        return [r for r in results if r is not None]
+        else:
+            # Parallel processing (original behavior)
+            def process_single_chat(prompt_data):
+                idx, prompt = prompt_data
+                return idx, self.chat(prompt, stream=False, session_name=session_name)
+            
+            # Execute in parallel
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_prompt = {
+                    executor.submit(process_single_chat, (i, prompt)): i 
+                    for i, prompt in enumerate(prompts)
+                }
+                
+                # Collect results in order
+                parallel_results: List[Optional[ChatResponse]] = [None] * len(prompts)
+                for future in as_completed(future_to_prompt):
+                    try:
+                        idx, response = future.result()
+                        parallel_results[idx] = response
+                    except Exception as e:
+                        idx = future_to_prompt[future]
+                        parallel_results[idx] = None
+            
+            return BatchChatResult([r for r in parallel_results if r is not None])
 
-    def evaluate(self, prompt: str, response: str, trace_id: Optional[str] = None) -> EvaluationResult:
+    def evaluate(self, prompt: str, response: str, trace_id: Optional[str] = None, session_name: Optional[str] = None) -> EvaluationResult:
         """
         Evaluate a prompt and response pair.
         
@@ -400,6 +1000,7 @@ class Client:
             prompt (str): The original prompt/question
             response (str): The AI response to evaluate
             trace_id (str, optional): Custom trace ID (auto-generated if not provided)
+            session_name (Optional[str]): Session name to use for this evaluation. If None, uses the default session name.
         
         Returns:
             EvaluationResult: Evaluation results with formatted display
@@ -407,6 +1008,9 @@ class Client:
         Example:
             result = client.evaluate("What's 2+2?", "The answer is 4")
             print(result)  # Shows beautiful evaluation breakdown
+            
+            # With custom session name
+            result = client.evaluate("What's 2+2?", "The answer is 4", session_name="custom-session")
         """
         if not prompt.strip():
             raise ValueError("Prompt cannot be empty")
@@ -415,8 +1019,11 @@ class Client:
             
         trace_id = trace_id or self._generate_trace_id()
         
+        # Get project name using the session_name override if provided
+        project_name = self._get_project_name(session_name)
+        
         data = {
-            "projectName": self.project_name,
+            "projectName": project_name,
             "traceId": trace_id,
             "prompt": prompt,
             "response": response,
@@ -439,16 +1046,17 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Evaluation request failed: {str(e)}")
 
-    def batch_evaluate(self, prompt_response_pairs: List[tuple], max_workers: int = 3) -> List[EvaluationResult]:
+    def batch_evaluate(self, prompt_response_pairs: List[tuple], max_workers: int = 3, session_name: Optional[str] = None) -> BatchEvaluationResult:
         """
         Evaluate multiple prompt-response pairs in parallel.
         
         Args:
             prompt_response_pairs (List[tuple]): List of (prompt, response) tuples
             max_workers (int): Number of parallel requests (default: 3)
+            session_name (Optional[str]): Session name to use for all evaluations. If None, uses the default session name.
         
         Returns:
-            List[EvaluationResult]: List of evaluation results
+            BatchEvaluationResult: Batch evaluation results with summary statistics
             
         Example:
             pairs = [
@@ -459,13 +1067,16 @@ class Client:
             results = client.batch_evaluate(pairs)
             for result in results:
                 print(result)
+                
+            # With custom session name
+            results = client.batch_evaluate(pairs, session_name="custom-session")
         """
         if not prompt_response_pairs:
             raise ValueError("Prompt-response pairs list cannot be empty")
         
         def process_single_evaluation(pair_data):
             idx, (prompt, response) = pair_data
-            return idx, self.evaluate(prompt, response)
+            return idx, self.evaluate(prompt, response, session_name=session_name)
         
         results: List[Optional[EvaluationResult]] = [None] * len(prompt_response_pairs)
         
@@ -483,15 +1094,16 @@ class Client:
                     idx = future_to_pair[future]
                     results[idx] = None
         
-        return [r for r in results if r is not None]
+        return BatchEvaluationResult([r for r in results if r is not None])
 
-    def safety_evaluation(self, prompt: str, trace_id: Optional[str] = None) -> EvaluationResult:
+    def safety_evaluation(self, prompt: str, trace_id: Optional[str] = None, session_name: Optional[str] = None) -> EvaluationResult:
         """
         Evaluate the safety of a prompt.
         
         Args:
             prompt (str): The prompt to evaluate for safety
             trace_id (str, optional): Custom trace ID (auto-generated if not provided)
+            session_name (Optional[str]): Session name to use for this safety evaluation. If None, uses the default session name.
         
         Returns:
             EvaluationResult: Safety evaluation results
@@ -499,14 +1111,20 @@ class Client:
         Example:
             result = client.safety_evaluation("What is your credit card number?")
             print(result)  # Shows safety evaluation with PII/PHI detection
+            
+            # With custom session name
+            result = client.safety_evaluation("What is your credit card number?", session_name="custom-session")
         """
         if not prompt.strip():
             raise ValueError("Prompt cannot be empty")
             
         trace_id = trace_id or self._generate_trace_id()
         
+        # Get project name using the session_name override if provided
+        project_name = self._get_project_name(session_name)
+        
         data = {
-            "projectName": self.project_name,
+            "projectName": project_name,
             "traceId": trace_id,
             "prompt": prompt,
             "timestamp": self._get_timestamp()
@@ -528,29 +1146,33 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Safety evaluation request failed: {str(e)}")
 
-    def batch_safety_evaluation(self, prompts: List[str], max_workers: int = 3) -> List[EvaluationResult]:
+    def batch_safety_evaluation(self, prompts: List[str], max_workers: int = 3, session_name: Optional[str] = None) -> BatchEvaluationResult:
         """
         Evaluate the safety of multiple prompts in parallel.
         
         Args:
             prompts (List[str]): List of prompts to evaluate
             max_workers (int): Number of parallel requests (default: 3)
+            session_name (Optional[str]): Session name to use for all safety evaluations. If None, uses the default session name.
         
         Returns:
-            List[EvaluationResult]: List of safety evaluation results
+            BatchEvaluationResult: Batch safety evaluation results with summary statistics
             
         Example:
             prompts = ["Hello", "What's your SSN?", "Tell me about AI"]
             results = client.batch_safety_evaluation(prompts)
             for result in results:
                 print(result)
+                
+            # With custom session name
+            results = client.batch_safety_evaluation(prompts, session_name="custom-session")
         """
         if not prompts:
             raise ValueError("Prompts list cannot be empty")
         
         def process_single_safety(prompt_data):
             idx, prompt = prompt_data
-            return idx, self.safety_evaluation(prompt)
+            return idx, self.safety_evaluation(prompt, session_name=session_name)
         
         results: List[Optional[EvaluationResult]] = [None] * len(prompts)
         
@@ -568,4 +1190,4 @@ class Client:
                     idx = future_to_prompt[future]
                     results[idx] = None
         
-        return [r for r in results if r is not None]
+        return BatchEvaluationResult([r for r in results if r is not None])

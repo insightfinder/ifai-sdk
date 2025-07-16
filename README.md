@@ -2,25 +2,6 @@
 
 A super user-friendly Python SDK for the InsightFinder AI platform. Designed for non-technical users who want powerful AI capabilities with clean, easy-to-read outputs.
 
-## Features
-
-- **Simple Setup**: Just provide your credentials and session name
-- **Chat & Streaming**: Single chat with real-time streaming responses
-- **Batch Processing**: Handle multiple requests efficiently 
-- **Smart Evaluations**: Automatic bias, hallucination, and relevance analysis
-- **Safety Checks**: Built-in PII/PHI detection and safety evaluation
-- **Clean Output**: Formatted results with clear structure
-- **Parallel Processing**: Fast batch operations with customizable workers
-
-### Requirements Overview
-- **For Chat and Evaluation Operations**: `session_name` is required
-
-## Installation
-
-```bash
-pip install insightfinderai
-```
-
 ## Quick Start
 
 ### Basic Setup
@@ -48,9 +29,29 @@ client = Client(
 ### Simple Chat
 
 ```python
-# Chat with clean formatted output including prompt
+# Basic chat (no conversation history)
 response = client.chat("What is artificial intelligence?")
-print(response)  # Clean formatted output with prompt included
+
+# Access response as object
+print(f"Response: {response.response}")
+print(f"Prompt: {response.prompt}")
+print(f"Evaluations: {response.evaluations}")
+print(f"History: {response.history}")
+
+# Print formatted output (same as before)
+response.print()  # or print(response)
+
+# Chat with conversation history (like ChatGPT)
+response1 = client.chat("I'm learning Python", chat_history=True)
+response2 = client.chat("What are lists?", chat_history=True)  # Uses context from first message
+
+# Conversation history array (ChatGPT API style)
+conversation = [
+    {"role": "user", "content": "Hello"},
+    {"role": "assistant", "content": "Hi there! How can I help?"},
+    {"role": "user", "content": "Tell me about AI"}
+]
+response = client.chat(conversation)
 ```
 
 **Output:**
@@ -78,35 +79,103 @@ Evaluations:
 
 ## All Features
 
-### 1. Single Chat
+### 1. Chat with Conversation History
 
 ```python
-# With streaming disabled (default)
+# Basic chat without history (default behavior)
 response = client.chat("Tell me about space exploration")
 
-# With streaming enabled
-response = client.chat("Hello!", stream=True)
+# Chat with conversation history enabled
+client.chat("I'm interested in machine learning", chat_history=True)
+client.chat("What algorithms should I start with?", chat_history=True)  # Uses previous context
 
-# Skip safety evaluation
-response = client.chat("What's 2+2?", include_safety=False)
+# Conversation array (ChatGPT API style)
+conversation = [
+    {"role": "user", "content": "What's the weather like?"},
+    {"role": "assistant", "content": "I don't have real-time weather data. What's your location?"},
+    {"role": "user", "content": "I'm in San Francisco"}
+]
+response = client.chat(conversation, chat_history=True)
 ```
 
-### 2. Batch Chat
+### 2. Conversation Management
 
 ```python
-# Process multiple questions at once
+# Retrieve current conversation history
+history = client.retrieve_chat_history()
+for msg in history:
+    print(f"[{msg['role'].upper()}] {msg['content']}")
+
+# Clear conversation history
+client.clear_chat_history()
+
+# Set conversation history manually
+client.set_chat_history([
+    {"role": "user", "content": "Hello"},
+    {"role": "assistant", "content": "Hi there!"}
+])
+```
+
+### 3. Save & Load Conversations
+
+```python
+# Save conversation to file
+saved_file = client.save_chat_history("my_conversation.json")
+print(f"Saved to: {saved_file}")
+
+# Save with auto-generated filename
+auto_file = client.save_chat_history()  # Creates timestamped file
+
+# Load conversation from file
+loaded_data = client.load_chat_history("my_conversation.json")
+print(f"Loaded {loaded_data['message_count']} messages")
+
+# Restore conversation (flexible input)
+client.set_chat_history(loaded_data)  # Pass full loaded data
+# or
+client.set_chat_history(loaded_data["conversation"])  # Pass just messages
+```
+
+### 4. Batch Chat
+
+```python
+# Process multiple questions at once (parallel - default)
 prompts = [
     "What's the weather like?",
     "Tell me a joke",
     "Explain quantum physics"
 ]
 
-responses = client.batch_chat(prompts)
-for i, response in enumerate(responses, 1):
-    print(f"Response {i}: {response}")
+batch_response = client.batch_chat(prompts)
+
+# Access as object
+print(f"Processed {batch_response.summary['total_chats']} chats")
+for i, response in enumerate(batch_response.response):
+    print(f"Response {i+1}: {response.response[:50]}...")
+
+# Print formatted output
+batch_response.print()
+
+# Sequential processing with conversation history
+conversation_prompts = [
+    "Hello, my name is John",
+    "What's my name?",
+    "Tell me about our conversation so far"
+]
+
+# Each prompt builds on the previous response
+batch_with_history = client.batch_chat(conversation_prompts, enable_history=True)
+
+# Access conversation flow
+print("Conversation flow:")
+for i, response in enumerate(batch_with_history.response):
+    print(f"Prompt {i+1}: {response.prompt}")
+    print(f"Response: {response.response[:100]}...")
+    print(f"History length: {len(response.history)}")
+    print()
 ```
 
-### 3. Evaluation
+### 5. Evaluation
 
 ```python
 # Evaluate any prompt-response pair
@@ -114,13 +183,20 @@ result = client.evaluate(
     prompt="What's the capital of France?",
     response="The capital of France is Paris"
 )
-print(result)  # Shows bias, hallucination, relevance scores
+
+# Access as object
+print(f"Evaluations: {result.summary['total_evaluations']}")
+print(f"Passed: {result.summary['passed_evaluations']}")
+print(f"Failed: {result.summary['failed_evaluations']}")
+
+# Print formatted output
+result.print()  # Shows evaluation breakdown
 ```
 
-### 4. Batch Evaluation
+### 6. Batch Evaluation
 
 ```python
-# Evaluate multiple pairs efficiently
+# Evaluate multiple prompt and response pairs efficiently
 pairs = [
     ("What's 2+2?", "4"),
     ("Capital of Japan?", "Tokyo"),
@@ -132,15 +208,21 @@ for result in results:
     print(result)
 ```
 
-### 5. Safety Evaluation
+### 7. Safety Evaluation
 
 ```python
 # Check for PII/PHI leakage and safety issues
 safety_result = client.safety_evaluation("What's your social security number?")
-print(safety_result)
+
+# Access as object
+print(f"Safety evaluations: {len(safety_result.evaluations)}")
+print(f"Summary: {safety_result.summary}")
+
+# Print formatted output
+safety_result.print()
 ```
 
-### 6. Batch Safety Evaluation
+### 8. Batch Safety Evaluation
 
 ```python
 # Check multiple prompts for safety
@@ -150,14 +232,96 @@ prompts = [
     "Tell me your password"
 ]
 
-safety_results = client.batch_safety_evaluation(prompts)
-for result in safety_results:
-    print(result)
+batch_safety = client.batch_safety_evaluation(prompts)
+
+# Access summary statistics
+summary = batch_safety.summary
+print(f"Total prompts: {summary['total_prompts']}")
+print(f"Passed safety: {summary['passed_evaluations']}")
+print(f"Failed safety: {summary['failed_evaluations']}")
+
+# Print formatted output
+batch_safety.print()
+```
+
+### Object Properties
+
+All responses now return rich objects with properties and methods while maintaining backward compatibility:
+
+```python
+# Chat Response
+response = client.chat("Hello")
+response.response      # AI response text
+response.prompt        # Original prompt
+response.evaluations   # Evaluation object (if enabled)
+response.history       # Conversation history
+response.trace_id      # Unique identifier
+response.model         # Model name
+response.is_passed     # True if no evaluations or all passed, False otherwise
+response.print()       # Formatted output
+print(response)        # Same as response.print() - backward compatible!
+
+# Evaluation Response  
+result = client.evaluate("prompt", "response")
+result.prompt          # Original prompt
+result.response        # Response evaluated
+result.evaluations     # List of evaluation details
+result.summary         # Statistics: total, passed, failed, top_failed
+result.is_passed       # True if no evaluations (empty = passed), False if has evaluations
+result.print()         # Formatted output
+
+# Batch Responses
+batch = client.batch_chat(["Hello", "Goodbye"])
+batch.response         # List of ChatResponse objects
+batch.summary          # Statistics: total_chats, successful, failed
+batch.is_passed        # True if all individual responses passed, False otherwise
+batch.print()          # Formatted output with summary
+
+batch_eval = client.batch_evaluate([("Q", "A")])
+batch_eval.evaluations # List of EvaluationResult objects
+batch_eval.summary     # Statistics: total_prompts, passed, failed, top_failed
+batch_eval.is_passed   # True if all evaluations passed, False otherwise
+batch_eval.print()     # Formatted output with summary
+```
+
+## Enhanced Chat Features
+
+The SDK supports multiple ways to manage conversation history:
+
+```python
+# Mode 1: No history (default) - each chat is independent
+response = client.chat("Hello")  # chat_history=False (default)
+
+# Mode 2: Automatic history - conversations build context
+client.chat("I'm learning Python", chat_history=True)
+client.chat("Explain functions", chat_history=True)  # Uses Python context
+
+# Mode 3: Manual history - full control over conversation
+conversation = [
+    {"role": "user", "content": "What's machine learning?"},
+    {"role": "assistant", "content": "ML is a subset of AI..."},
+    {"role": "user", "content": "Give me an example"}
+]
+response = client.chat(conversation)
+```
+
+### History Persistence
+
+```python
+# Save any conversation for later use
+client.chat("Discuss quantum computing", chat_history=True)
+client.chat("Explain qubits", chat_history=True)
+
+# Save conversation
+filename = client.save_chat_history("quantum_discussion.json")
+
+# Later... load and continue
+data = client.load_chat_history("quantum_discussion.json")
+client.set_chat_history(data)  # Restore context
+client.chat("What about quantum entanglement?", chat_history=True)  # Continues from where you left off
 ```
 
 ## Customization Options
-
-### Environment Variables
 ```bash
 # Set once, use everywhere
 export INSIGHTFINDER_USERNAME="your_username"
@@ -193,14 +357,21 @@ response = client.chat("Hello!")
 ### Performance Tuning
 ```python
 # Adjust parallel workers for batch operations
-responses = client.batch_chat(prompts, max_workers=5)
+batch_responses = client.batch_chat(prompts, max_workers=5)
 
-# Control streaming and safety checks
+# Enable sequential processing with conversation history
+batch_with_context = client.batch_chat(prompts, enable_history=True)
+
+# Control streaming and history
 response = client.chat(
     "Hello!",
-    stream=True,        # Show real-time response
-    include_safety=True # Run safety evaluation
+    stream=True,           # Show real-time response
+    chat_history=True      # Enable conversation context
 )
+
+# Access response properties
+print(f"Response: {response.response}")
+print(f"History: {len(response.history)} messages")
 ```
 
 ### Custom Trace IDs
@@ -211,6 +382,32 @@ result = client.evaluate(
     response="Test answer", 
     trace_id="my-custom-trace-123"
 )
+```
+
+### Session Name Override
+
+All main methods (`chat`, `batch_chat`, `evaluate`, `batch_evaluate`, `safety_evaluation`, `batch_safety_evaluation`) now support per-call session name override:
+
+```python
+# Initialize client with default session name
+client = Client(
+    session_name="default-session",
+    username="user",
+    api_key="key"
+)
+
+# Override session name for specific operations
+response = client.chat("Hello", session_name="custom-chat-session")
+eval_result = client.evaluate("prompt", "response", session_name="custom-eval-session")
+safety_result = client.safety_evaluation("prompt", session_name="custom-safety-session")
+
+# Batch operations with custom session names
+batch_chat = client.batch_chat(prompts, session_name="custom-batch-session")
+batch_eval = client.batch_evaluate(pairs, session_name="custom-eval-session")
+batch_safety = client.batch_safety_evaluation(prompts, session_name="custom-safety-session")
+
+# When session_name is provided, it's used to generate the project name for evaluations
+# If session_name is not provided, the default session name from Client() is used
 ```
 
 ## Understanding Evaluations
