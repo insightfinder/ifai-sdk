@@ -297,9 +297,21 @@ class Client:
                                     content = delta.get("content", "")
                                     
                                     # Check if we're starting an evaluation block
-                                    if content.startswith("{") and "evaluations" in content:
-                                        in_evaluation_block = True
-                                        evaluation_buffer = content
+                                    if content and content.startswith("{") and "evaluations" in content:
+                                        # Check if it's a complete JSON in one chunk
+                                        if content.endswith("}"):
+                                            try:
+                                                eval_obj = json.loads(content)
+                                                evaluations = eval_obj.get("evaluations")
+                                                trace_id = eval_obj.get("traceId", trace_id)
+                                            except json.JSONDecodeError:
+                                                # If parsing fails, treat as start of multi-chunk evaluation
+                                                in_evaluation_block = True
+                                                evaluation_buffer = content
+                                        else:
+                                            # Start of multi-chunk evaluation
+                                            in_evaluation_block = True
+                                            evaluation_buffer = content
                                     elif in_evaluation_block:
                                         # We're in an evaluation block, accumulate content
                                         evaluation_buffer += content
