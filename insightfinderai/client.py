@@ -94,6 +94,9 @@ class Client:
         # Initialize conversation history
         self.conversation = ConversationHistory()
         
+        # Cache for project names to avoid repeated API calls
+        self._project_name_cache: Dict[str, str] = {}
+        
         # Generate project name dynamically
         self.project_name = self._get_project_name()
 
@@ -131,6 +134,7 @@ class Client:
     def _get_project_name(self, session_name: Optional[str] = None) -> str:
         """
         Get the project name by calling the trace project name API and appending '-Prompt'.
+        Uses caching to avoid repeated API calls for the same session name.
         
         Args:
             session_name (Optional[str]): Session name to use. If None, uses the default session name.
@@ -140,6 +144,10 @@ class Client:
         """
         # Use provided session_name or fall back to default
         effective_session_name = session_name or self.session_name
+        
+        # Check cache first
+        if effective_session_name in self._project_name_cache:
+            return self._project_name_cache[effective_session_name]
         
         data = {
             "userCreatedModelName": effective_session_name
@@ -159,10 +167,31 @@ class Client:
             trace_project_name = response.text.strip()
             
             # Append "-Prompt" to the trace project name
-            return f"{trace_project_name}-Prompt"
+            project_name = f"{trace_project_name}-Prompt"
+            
+            # Cache the result
+            self._project_name_cache[effective_session_name] = project_name
+            
+            return project_name
             
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Failed to get trace project name: {str(e)}")
+
+    def clear_project_name_cache(self):
+        """
+        Clear the cached project names. 
+        Use this if you need to force refresh project names from the API.
+        """
+        self._project_name_cache.clear()
+    
+    def get_cached_project_names(self) -> Dict[str, str]:
+        """
+        Get a copy of the currently cached project names.
+        
+        Returns:
+            Dict[str, str]: Dictionary mapping session names to project names
+        """
+        return self._project_name_cache.copy()
 
     def chat(self, messages: Union[str, List[Dict[str, str]]], stream: bool = False, chat_history: bool = False, session_name: Optional[str] = None) -> ChatResponse:
         """
@@ -249,6 +278,14 @@ class Client:
             
         # Use provided session_name or fall back to default
         effective_session_name = session_name or self.session_name
+        
+        # Get project name for model version extraction
+        project_name = None
+        try:
+            project_name = self._get_project_name(effective_session_name)
+        except Exception:
+            # If project name retrieval fails, continue without it
+            pass
         
         # Prepare request data (using 'prompt' as per the original API)
         data = {
@@ -349,7 +386,9 @@ class Client:
                 model=model,
                 raw_chunks=results,
                 enable_evaluations=self.enable_evaluations,
-                history=self.conversation.get_messages() if chat_history else []
+                history=self.conversation.get_messages() if chat_history else [],
+                project_name=project_name,
+                session_name=effective_session_name
             )
             
             return chat_response

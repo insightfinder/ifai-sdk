@@ -68,14 +68,79 @@ class BatchChatResult:
     
     def __str__(self):
         """Format batch chat results for display."""
-        result = "[Batch Chat Results]\n"
-        result += f"Total Chats    : {self.summary['total_chats']}\n"
-        result += f"Successful     : {self.summary['successful_chats']}\n"
-        result += f"Failed         : {self.summary['failed_chats']}\n"
-        result += "\n" + "="*60 + "\n\n"
+        if not self.response:
+            return "[Batch Chat Results]\nNo responses available."
+        
+        # Get model info from first response (assuming all use same model)
+        first_response = self.response[0]
+        result = f"Model         : {first_response.model or 'Unknown'}\n"
+        result += f"Model Version : {first_response.model_version or 'Unknown'}\n\n"
+        
+        # Display each prompt and response
+        for i, chat_response in enumerate(self.response, 1):
+            result += f"--- Prompt {i} ---\n"
+            result += "Prompt:\n"
+            
+            # Handle prompt display
+            if isinstance(chat_response.prompt, list):
+                for msg in chat_response.prompt:
+                    role = msg.get('role', 'unknown').upper()
+                    content = msg.get('content', '')
+                    result += f">> [{role}] {content}\n"
+            else:
+                result += f">> {chat_response.prompt}\n"
+            
+            result += "\nResponse:\n"
+            result += f">> {chat_response.response}\n\n"
+        
+        # Display evaluations section
+        result += "Evaluations:\n"
+        result += "-" * 56 + "\n"
         
         for i, chat_response in enumerate(self.response, 1):
-            result += f"--- Response {i} ---\n"
-            result += str(chat_response) + "\n\n"
+            # Get prompt text for evaluation header
+            if isinstance(chat_response.prompt, list):
+                # Extract last user message for header
+                prompt_text = "Conversation"
+                for msg in reversed(chat_response.prompt):
+                    if msg.get('role') == 'user':
+                        prompt_text = msg.get('content', 'Conversation')[:50]
+                        if len(msg.get('content', '')) > 50:
+                            prompt_text += "..."
+                        break
+            else:
+                prompt_text = str(chat_response.prompt)[:50]
+                if len(str(chat_response.prompt)) > 50:
+                    prompt_text += "..."
+            
+            result += f"-- Evaluations for Prompt {i}: {prompt_text} --\n"
+            
+            # Display evaluations for this prompt
+            if chat_response.evaluations and chat_response._evaluation_result:
+                eval_content = chat_response._evaluation_result.format_for_chat()
+                # Remove the "Evaluations:" header since we have our own
+                eval_lines = eval_content.split('\n')
+                if eval_lines[0].strip() == "Evaluations:":
+                    eval_lines = eval_lines[2:]  # Skip "Evaluations:" and separator line
+                result += '\n'.join(eval_lines) + "\n\n"
+            elif chat_response.enable_evaluations:
+                result += "PASSED\n\n"
+            else:
+                result += "No evaluations\n\n"
+        
+        # Add evaluation summary
+        eval_summary = self.evaluation_summary
+        result += "Evaluation Summary\n"
+        result += "-" * 66 + "\n"
+        result += f"Total prompts: {eval_summary['total_prompts']}\n"
+        result += f"Passed evaluations: {eval_summary['passed_evaluations']}\n"
+        result += f"Failed evaluations: {eval_summary['failed_evaluations']}\n"
+        
+        if eval_summary['top_failed_evaluation']:
+            if isinstance(eval_summary['top_failed_evaluation'], list):
+                top_failed = ', '.join(eval_summary['top_failed_evaluation'])
+            else:
+                top_failed = eval_summary['top_failed_evaluation']
+            result += f"Top failed: {top_failed}\n"
         
         return result

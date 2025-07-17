@@ -62,8 +62,8 @@ class EvaluationResult:
     def __str__(self):
         """Format evaluation results for clean display."""
         result = "[Evaluation Results]\n"
-        result += f"Trace ID : {self.trace_id}\n"
-        result += "\n"
+        # result += f"Trace ID : {self.trace_id}\n"  # Commented out as requested
+        # result += "\n"
         
         # Always show prompt and response if available
         if self.prompt:

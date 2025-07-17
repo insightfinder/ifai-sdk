@@ -70,22 +70,59 @@ class BatchEvaluationResult:
     
     def __str__(self):
         """Format batch evaluation results for display."""
-        result = "[Batch Evaluation Results]\n"
-        result += f"Total Prompts     : {self.summary['total_prompts']}\n"
-        result += f"Passed Evaluations: {self.summary['passed_evaluations']}\n"
-        result += f"Failed Evaluations: {self.summary['failed_evaluations']}\n"
+        if not self.evaluations:
+            return "[Batch Evaluation Results]\nNo evaluations available."
         
-        if self.summary['top_failed_evaluation']:
-            top_failed = self.summary['top_failed_evaluation']
-            if isinstance(top_failed, list):
-                result += f"Top Failed        : {', '.join(top_failed)}\n"
-            else:
-                result += f"Top Failed        : {top_failed}\n"
+        result = ""
         
-        result += "\n" + "="*60 + "\n\n"
-        
+        # Display each evaluation
         for i, eval_result in enumerate(self.evaluations, 1):
             result += f"--- Evaluation {i} ---\n"
-            result += str(eval_result) + "\n\n"
+            
+            # Display prompt
+            if eval_result.prompt:
+                result += "Prompt:\n"
+                result += f">> {eval_result.prompt}\n\n"
+            
+            # Display response if available
+            if eval_result.response:
+                result += "Response:\n"
+                result += f">> {eval_result.response}\n\n"
+            
+            # Display evaluations
+            if eval_result.evaluations:
+                result += "Evaluations:\n"
+                result += "-" * 40 + "\n"
+                
+                for j, eval_item in enumerate(eval_result.evaluations, 1):
+                    eval_type = eval_item.get('evaluationType', 'Unknown')
+                    score = eval_item.get('score', 0)
+                    explanation = eval_item.get('explanation', 'No explanation provided')
+                    
+                    result += f"{j}. Type        : {eval_type}\n"
+                    result += f"   Score       : {score}\n"
+                    result += f"   Explanation : {explanation}\n"
+                    if j < len(eval_result.evaluations):
+                        result += "\n"
+            else:
+                result += "Evaluations:\n"
+                result += "-" * 40 + "\n"
+                result += "PASSED"
+            
+            result += "\n\n"
+        
+        # Add evaluation summary
+        result += "Evaluation Summary\n"
+        result += "-" * 66 + "\n"
+        result += f"Total prompts: {self.summary['total_prompts']}\n"
+        result += f"Passed evaluations: {self.summary['passed_evaluations']}\n"
+        result += f"Failed evaluations: {self.summary['failed_evaluations']}\n"
+        
+        if self.summary['top_failed_evaluation']:
+            if isinstance(self.summary['top_failed_evaluation'], list):
+                top_failed = ', '.join(self.summary['top_failed_evaluation'])
+            else:
+                top_failed = self.summary['top_failed_evaluation']
+            result += f"Top failed: {top_failed}\n"
         
         return result
