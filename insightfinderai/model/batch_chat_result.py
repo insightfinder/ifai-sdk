@@ -141,6 +141,6 @@ class BatchChatResult:
                 top_failed = ', '.join(eval_summary['top_failed_evaluation'])
             else:
                 top_failed = eval_summary['top_failed_evaluation']
-            result += f"Top failed: {top_failed}\n"
+            result += f"Top Failed Evaluation: {top_failed}\n"
         
         return result
