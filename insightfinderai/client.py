@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import DEFAULT_API_URL, CHATBOT_ENDPOINT, EVALUATION_ENDPOINT, SAFETY_EVALUATION_ENDPOINT, TRACE_PROJECT_NAME_ENDPOINT
 from .conversation import ConversationHistory
-from .model import EvaluationResult, ChatResponse, BatchEvaluationResult, BatchChatResult
+from .model import EvaluationResult, ChatResponse, BatchEvaluationResult, BatchChatResult, BatchComparisonResult
 
 logger = logging.getLogger(__name__)
 
@@ -303,7 +303,7 @@ class Client:
             
             if not (200 <= response.status_code < 300):
                 raise ValueError(f"API error {response.status_code}: {response.text}")
-            
+
             # Process streaming response
             results = []
             stitched_response = ""
@@ -896,3 +896,89 @@ class Client:
                     results[idx] = None
         
         return BatchEvaluationResult([r for r in results if r is not None])
+
+    def compare_models(self, session1_name: str, session2_name: str, prompts: List[str], 
+                         stream: bool = False, max_workers: int = 3) -> BatchComparisonResult:
+        """
+        Compare two sessions/models by running the same set of prompts on both and comparing results.
+        
+        Args:
+            session1_name (str): Name of the first session/model to compare
+            session2_name (str): Name of the second session/model to compare  
+            prompts (List[str]): List of prompts to test on both sessions
+            stream (bool): Whether to show progress updates (default: False)
+            max_workers (int): Number of parallel requests per session (default: 3)
+        
+        Returns:
+            BatchComparisonResult: Comparison result object with side-by-side display
+            
+        Example:
+            # Compare two different models/sessions
+            prompts = [
+                "What is artificial intelligence?",
+                "Explain machine learning", 
+                "Tell me a joke"
+            ]
+            
+            comparison = client.compare_models(
+                session1_name="gpt-4",
+                session2_name="claude-3", 
+                prompts=prompts
+            )
+            
+            # Print side-by-side comparison
+            comparison.print()
+            
+            # Access individual results
+            session1_results = comparison.session1
+            session2_results = comparison.session2
+            
+            # Check which performed better
+            if comparison.comparison_summary['better_performing_model'] != 'tie':
+                print(f"Better model: {comparison.comparison_summary['better_performing_model']}")
+        """
+        if not prompts:
+            raise ValueError("Prompts list cannot be empty")
+        if not session1_name or not session2_name:
+            raise ValueError("Both session names must be provided")
+        if session1_name == session2_name:
+            raise ValueError("Session names must be different for comparison")
+        
+        # Run batch_chat for both sessions in parallel using ThreadPoolExecutor
+        def run_batch_for_session(session_name: str) -> BatchChatResult:
+            return self.batch_chat(
+                prompts=prompts,
+                stream=False,  # Disable streaming for parallel execution
+                max_workers=max_workers,
+                session_name=session_name,
+                enable_history=False  # No history for comparison tests
+            )
+        
+        if stream:
+            print(f"Starting comparison between '{session1_name}' and '{session2_name}'...")
+            print(f"Testing {len(prompts)} prompts on both sessions...")
+        
+        # Execute both batch operations in parallel
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            # Submit both tasks
+            future1 = executor.submit(run_batch_for_session, session1_name)
+            future2 = executor.submit(run_batch_for_session, session2_name)
+            
+            if stream:
+                print("Running batch chats in parallel...")
+            
+            # Wait for both to complete
+            model1_result = future1.result()
+            model2_result = future2.result()
+        
+        if stream:
+            print("Comparison completed! Generating results...")
+        
+        # Create and return comparison result
+        return BatchComparisonResult(
+            model1_result=model1_result,
+            model2_result=model2_result,
+            session1_name=session1_name,
+            session2_name=session2_name,
+            prompts=prompts
+        )
