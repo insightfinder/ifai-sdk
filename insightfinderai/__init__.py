@@ -8,5 +8,5 @@ Designed for easy use with beautiful, formatted outputs.
 from .client import Client
 from .model import ChatResponse, EvaluationResult, BatchEvaluationResult, BatchChatResult
 
-__version__ = "2.2.2"
+__version__ = "2.2.3"
 __all__ = ["Client", "ChatResponse", "EvaluationResult", "BatchEvaluationResult", "BatchChatResult"]
