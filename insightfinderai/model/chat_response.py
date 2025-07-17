@@ -14,12 +14,16 @@ class ChatResponse:
         self.history = history or []
         # Convert prompt to string for evaluation result if it's a list
         prompt_str = self._format_prompt_for_display() if isinstance(prompt, list) else prompt
-        self.evaluations = EvaluationResult({'evaluations': evaluations or []}, trace_id, prompt_str, response) if evaluations else None
+        
+        # Store evaluations both as EvaluationResult object and as direct list
+        self._evaluation_result = EvaluationResult({'evaluations': evaluations or []}, trace_id, prompt_str, response) if evaluations else None
+        self.evaluations = evaluations or []  # Direct access to evaluations list
+        
         self.enable_evaluations = enable_evaluations
         self.trace_id = trace_id
         self.model = model
         self.raw_chunks = raw_chunks or []
-        self.is_passed = self.evaluations is None or self.evaluations.is_passed
+        self.is_passed = self._evaluation_result is None or self._evaluation_result.is_passed
     
     def _format_prompt_for_display(self) -> str:
         """Format conversation history for display."""
@@ -62,8 +66,8 @@ class ChatResponse:
         result += f">> {self.response}\n"
         
         # Show evaluations if they exist and enable_evaluations was enabled
-        if self.evaluations and self.evaluations.evaluations:
-            result += "\n" + self.evaluations.format_for_chat()
+        if self.evaluations and self._evaluation_result:
+            result += "\n" + self._evaluation_result.format_for_chat()
         elif self.enable_evaluations:
             # Show PASSED when evaluations are enabled but no evaluations were returned
             result += "\n\nEvaluations:\n"
