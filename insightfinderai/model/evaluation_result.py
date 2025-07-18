@@ -7,11 +7,13 @@ from typing import List, Optional, Union, Dict, Any
 class EvaluationResult:
     """Represents an evaluation result with formatted display and object access."""
     
-    def __init__(self, evaluation_data: dict, trace_id: Optional[str] = None, prompt: Optional[str] = None, response: Optional[str] = None):
+    def __init__(self, evaluation_data: dict, trace_id: Optional[str] = None, prompt: Optional[str] = None, response: Optional[str] = None, model: Optional[str] = None, model_version: Optional[str] = None):
         self.evaluations = evaluation_data.get('evaluations', [])
         self.trace_id = trace_id or evaluation_data.get('traceId', '')
         self.prompt = prompt
         self.response = response
+        self.model = model
+        self.model_version = model_version
         self.is_passed = not self.evaluations  # True if no evaluations (empty list = passed)
         self.summary = self._generate_summary()
     

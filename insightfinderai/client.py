@@ -7,7 +7,7 @@ import os
 from typing import List, Optional, Union, Callable, Any, Dict
 from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from .config import DEFAULT_API_URL, CHATBOT_ENDPOINT, EVALUATION_ENDPOINT, SAFETY_EVALUATION_ENDPOINT, TRACE_PROJECT_NAME_ENDPOINT
+from .config import DEFAULT_API_URL, CHATBOT_ENDPOINT, EVALUATION_ENDPOINT, SAFETY_EVALUATION_ENDPOINT, TRACE_PROJECT_NAME_ENDPOINT, MODEL_INFO_ENDPOINT
 from .conversation import ConversationHistory
 from .model import EvaluationResult, ChatResponse, BatchEvaluationResult, BatchChatResult, BatchComparisonResult
 
@@ -90,12 +90,16 @@ class Client:
         self.evaluation_url = self.base_url + EVALUATION_ENDPOINT  
         self.safety_url = self.base_url + SAFETY_EVALUATION_ENDPOINT
         self.trace_project_name_url = self.base_url + TRACE_PROJECT_NAME_ENDPOINT
+        self.model_info_url = self.base_url + MODEL_INFO_ENDPOINT
         
         # Initialize conversation history
         self.conversation = ConversationHistory()
         
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
+        
+        # Cache for model info to avoid repeated API calls
+        self._model_info_cache: Dict[str, Dict[str, str]] = {}
         
         # Generate project name dynamically
         self.project_name = self._get_project_name()
@@ -309,7 +313,6 @@ class Client:
             stitched_response = ""
             evaluations = None
             trace_id = None
-            model = None
             evaluation_buffer = ""  # Buffer to accumulate evaluation JSON
             in_evaluation_block = False
             
@@ -322,8 +325,6 @@ class Client:
                             results.append(chunk)
                             
                             # Extract metadata
-                            if not model and "model" in chunk:
-                                model = chunk["model"]
                             if "id" in chunk:
                                 trace_id = chunk["id"]
                                 
@@ -377,13 +378,24 @@ class Client:
                 # Trim context again after adding response if needed
                 self._trim_context_if_needed()
             
+            # Get model info from dedicated API
+            try:
+                model_info = self._get_model_info(effective_session_name)
+                model_type = model_info.get('modelType', 'Unknown')
+                model_version = model_info.get('modelVersion', 'Unknown')
+            except Exception as e:
+                logger.warning(f"Failed to get model info: {e}")
+                model_type = 'Unknown'
+                model_version = 'Unknown'
+            
             # Create response object
             chat_response = ChatResponse(
                 response=stitched_response,
                 prompt=prompt_for_display,
                 evaluations=evaluations if self.enable_evaluations else None,
                 trace_id=trace_id,
-                model=model,
+                model=model_type,
+                model_version=model_version,
                 raw_chunks=results,
                 enable_evaluations=self.enable_evaluations,
                 history=self.conversation.get_messages() if chat_history else [],
@@ -745,8 +757,18 @@ class Client:
             if not (200 <= api_response.status_code < 300):
                 raise ValueError(f"Evaluation API error {api_response.status_code}: {api_response.text}")
             
+            # Get model info for the session
+            try:
+                model_info = self._get_model_info(session_name)
+                model_type = model_info.get('modelType', 'Unknown')
+                model_version = model_info.get('modelVersion', 'Unknown')
+            except Exception as e:
+                logger.warning(f"Failed to get model info for evaluation: {e}")
+                model_type = 'Unknown'
+                model_version = 'Unknown'
+            
             result_data = api_response.json()
-            return EvaluationResult(result_data, trace_id, prompt, response)
+            return EvaluationResult(result_data, trace_id, prompt, response, model_type, model_version)
             
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Evaluation request failed: {str(e)}")
@@ -845,8 +867,18 @@ class Client:
             if not (200 <= api_response.status_code < 300):
                 raise ValueError(f"Safety API error {api_response.status_code}: {api_response.text}")
             
+            # Get model info for the session
+            try:
+                model_info = self._get_model_info(session_name)
+                model_type = model_info.get('modelType', 'Unknown')
+                model_version = model_info.get('modelVersion', 'Unknown')
+            except Exception as e:
+                logger.warning(f"Failed to get model info for safety evaluation: {e}")
+                model_type = 'Unknown'
+                model_version = 'Unknown'
+            
             result_data = api_response.json()
-            return EvaluationResult(result_data, trace_id, prompt, None)
+            return EvaluationResult(result_data, trace_id, prompt, None, model_type, model_version)
             
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Safety evaluation request failed: {str(e)}")
@@ -982,3 +1014,67 @@ class Client:
             session2_name=session2_name,
             prompts=prompts
         )
+
+    def _get_model_info(self, session_name: Optional[str] = None) -> Dict[str, str]:
+        """
+        Get model information for a given session name.
+        
+        Args:
+            session_name (Optional[str]): Session name to get model info for. 
+                                        If None, uses the default session name.
+        
+        Returns:
+            Dict[str, str]: Dictionary with 'modelType' and 'modelVersion' keys
+            
+        Raises:
+            ValueError: If the API request fails
+        """
+        effective_session_name = session_name or self.session_name
+        
+        # Check cache first
+        if effective_session_name in self._model_info_cache:
+            return self._model_info_cache[effective_session_name]
+        
+        data = {
+            "userCreatedModelName": effective_session_name
+        }
+        
+        try:
+            response = requests.post(
+                self.model_info_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model info API error {response.status_code}: {response.text}")
+            
+            result_data = response.json()
+            model_info = {
+                'modelType': result_data.get('modelType', 'Unknown'),
+                'modelVersion': result_data.get('modelVersion', 'Unknown')
+            }
+            
+            # Cache the result
+            self._model_info_cache[effective_session_name] = model_info
+            
+            return model_info
+            
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Failed to get model info: {str(e)}")
+
+    def clear_model_info_cache(self):
+        """
+        Clear the cached model information. 
+        Use this if you need to force refresh model info from the API.
+        """
+        self._model_info_cache.clear()
+    
+    def get_cached_model_info(self) -> Dict[str, Dict[str, str]]:
+        """
+        Get a copy of the currently cached model information.
+        
+        Returns:
+            Dict[str, Dict[str, str]]: Dictionary mapping session names to model info dictionaries
+        """
+        return self._model_info_cache.copy()
