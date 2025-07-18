@@ -169,7 +169,7 @@ class BatchComparisonResult:
             # Wrap long evaluation names
             top_failed1_wrapped = self._wrap_text(f"Top Failed Evaluation: {top_failed1}", 58)
         else:
-            top_failed1_wrapped = ["Top Failed Evaluation: None"]
+            top_failed1_wrapped = ["Top Failed Evaluation: -"]
         
         if session2_eval_summary['top_failed_evaluation']:
             if isinstance(session2_eval_summary['top_failed_evaluation'], list):
@@ -179,7 +179,7 @@ class BatchComparisonResult:
             # Wrap long evaluation names
             top_failed2_wrapped = self._wrap_text(f"Top Failed Evaluation: {top_failed2}", 58)
         else:
-            top_failed2_wrapped = ["Top Failed Evaluation: None"]
+            top_failed2_wrapped = ["Top Failed Evaluation: -"]
         
         # Display wrapped top failed evaluations
         max_failed_lines = max(len(top_failed1_wrapped), len(top_failed2_wrapped))
