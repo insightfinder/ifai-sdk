@@ -1,6 +1,9 @@
 """
 BatchChatResult model for the InsightFinder AI SDK.
 """
+import json
+import os
+from datetime import datetime
 from typing import List, Optional, Union, Dict, Any
 from .chat_response import ChatResponse
 
@@ -12,20 +15,20 @@ class BatchChatResult:
         self.response = chat_responses
         self.evaluations = [resp.evaluations for resp in chat_responses if resp.evaluations]
         self.history = []  # Batch chat typically doesn't maintain conversation history
-        self.summary = self._generate_summary()
+        # self.summary = self._generate_summary()
         self.evaluation_summary = self._generate_evaluation_summary()
         self.is_passed = all(resp.is_passed for resp in chat_responses)
     
-    def _generate_summary(self) -> Dict[str, Any]:
-        """Generate summary statistics for batch chat."""
-        total_chats = len(self.response)
-        successful_chats = sum(1 for resp in self.response if resp.response)
+    # def _generate_summary(self) -> Dict[str, Any]:
+    #     """Generate summary statistics for batch chat."""
+    #     total_chats = len(self.response)
+    #     successful_chats = sum(1 for resp in self.response if resp.response)
         
-        return {
-            'total_chats': total_chats,
-            'successful_chats': successful_chats,
-            'failed_chats': total_chats - successful_chats
-        }
+    #     return {
+    #         'total_chats': total_chats,
+    #         'successful_chats': successful_chats,
+    #         'failed_chats': total_chats - successful_chats
+    #     }
     
     def _generate_evaluation_summary(self) -> Dict[str, Any]:
         """Generate evaluation summary with same structure as EvaluationResult."""
@@ -54,7 +57,67 @@ class BatchChatResult:
             'failed_evaluations': failed_evaluations,
             'top_failed_evaluation': top_failed_evaluation
         }
-    
+
+    def save(self, filename: Optional[str] = None) -> str:
+        """Save the batch chat result to a JSON file.
+        
+        Args:
+            filename: Optional filename. If not provided, auto-generates one.
+                     Can be just a name like "batch_chat" or include .json extension.
+        
+        Returns:
+            The full path of the saved file.
+        """
+        # Generate filename if not provided
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"batch_chat_result_{timestamp}.json"
+        elif not filename.endswith('.json'):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{filename}_{timestamp}.json"
+        
+        # Prepare the data to save - convert ChatResponse objects to dictionaries
+        responses_data = []
+        
+        # Get common model info from first response (assuming all use same model)
+        first_response = self.response[0] if self.response else None
+        
+        for resp in self.response:
+            response_data = {
+                "prompt": resp.prompt,
+                "response": resp.response,
+                "evaluations": resp.evaluations,
+                "metadata": {
+                    "trace_id": resp.trace_id,
+                    "is_passed": resp.is_passed
+                }
+            }
+            
+            # Only include history if it's not empty
+            if resp.history:
+                response_data["history"] = resp.history
+                
+            responses_data.append(response_data)
+        
+        data = {
+            "type": "batch_chat_result",
+            "timestamp": datetime.now().isoformat(),
+            "model": first_response.model if first_response else None,
+            "model_version": first_response.model_version if first_response else None,
+            "project_name": first_response.project_name if first_response else None,
+            "session_name": first_response.session_name if first_response else None,
+            # "summary": self.summary,  # Commented out - not needed
+            "evaluation_summary": self.evaluation_summary,
+            "is_passed": self.is_passed,
+            "responses": responses_data
+        }
+        
+        # Save to file
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        return os.path.abspath(filename)
+
     @property
     def prompt(self) -> List[Union[str, List[Dict[str, str]]]]:
         """Get all prompts from the batch chat."""
@@ -136,11 +199,14 @@ class BatchChatResult:
         result += f"Passed evaluations: {eval_summary['passed_evaluations']}\n"
         result += f"Failed evaluations: {eval_summary['failed_evaluations']}\n"
         
+        # Always show Top Failed Evaluation line
         if eval_summary['top_failed_evaluation']:
             if isinstance(eval_summary['top_failed_evaluation'], list):
                 top_failed = ', '.join(eval_summary['top_failed_evaluation'])
             else:
                 top_failed = eval_summary['top_failed_evaluation']
             result += f"Top Failed Evaluation: {top_failed}\n"
+        else:
+            result += f"Top Failed Evaluation: -\n"
         
         return result

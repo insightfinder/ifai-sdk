@@ -706,6 +706,8 @@ class Client:
                     except Exception as e:
                         idx = future_to_prompt[future]
                         parallel_results[idx] = None
+                        # Print the error to console
+                        print(f"Error processing prompt {idx + 1}: {str(e)}")
             
             return BatchChatResult([r for r in parallel_results if r is not None])
 
@@ -820,6 +822,9 @@ class Client:
                 except Exception as e:
                     idx = future_to_pair[future]
                     results[idx] = None
+                    # Print the error to console
+                    prompt, response = prompt_response_pairs[idx]
+                    print(f"Error evaluating prompt {idx + 1} ('{prompt[:50]}...'): {str(e)}")
         
         return BatchEvaluationResult([r for r in results if r is not None])
 
@@ -926,6 +931,9 @@ class Client:
                 except Exception as e:
                     idx = future_to_prompt[future]
                     results[idx] = None
+                    # Print the error to console
+                    prompt = prompts[idx]
+                    print(f"Error evaluating safety for prompt {idx + 1} ('{prompt[:50]}...'): {str(e)}")
         
         return BatchEvaluationResult([r for r in results if r is not None])
 

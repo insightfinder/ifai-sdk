@@ -1,6 +1,9 @@
 """
 BatchComparisonResult model for comparing two sessions with the same prompts.
 """
+import json
+import os
+from datetime import datetime
 from typing import List, Optional, Union, Dict, Any
 from .batch_chat_result import BatchChatResult
 
@@ -49,6 +52,77 @@ class BatchComparisonResult:
             'better_performing_model': better_model,
             'performance_difference': abs(session1_passed - session2_passed)
         }
+
+    def save(self, filename: Optional[str] = None) -> str:
+        """Save the batch comparison result to a JSON file.
+        
+        Args:
+            filename: Optional filename. If not provided, auto-generates one.
+                     Can be just a name like "comparison" or include .json extension.
+        
+        Returns:
+            The full path of the saved file.
+        """
+        # Generate filename if not provided
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"batch_comparison_result_{timestamp}.json"
+        elif not filename.endswith('.json'):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{filename}_{timestamp}.json"
+        
+        # Prepare the data to save
+        def serialize_batch_result(batch_result: BatchChatResult) -> Dict[str, Any]:
+            """Convert BatchChatResult to dictionary."""
+            responses_data = []
+            
+            # Get common model info from first response (assuming all use same model)
+            first_response = batch_result.response[0] if batch_result.response else None
+            
+            for resp in batch_result.response:
+                response_data = {
+                    "prompt": resp.prompt,
+                    "response": resp.response,
+                    "evaluations": resp.evaluations,
+                    "metadata": {
+                        "trace_id": resp.trace_id,
+                        "is_passed": resp.is_passed
+                    }
+                }
+                
+                # Only include history if it's not empty
+                if resp.history:
+                    response_data["history"] = resp.history
+                    
+                responses_data.append(response_data)
+            
+            return {
+                "model": first_response.model if first_response else None,
+                "model_version": first_response.model_version if first_response else None,
+                "project_name": first_response.project_name if first_response else None,
+                "session_name": first_response.session_name if first_response else None,
+                # "summary": batch_result.summary,
+                "evaluation_summary": batch_result.evaluation_summary,
+                "is_passed": batch_result.is_passed,
+                "responses": responses_data
+            }
+        
+        data = {
+            "type": "batch_comparison_result",
+            "timestamp": datetime.now().isoformat(),
+            "comparison_summary": self.comparison_summary,
+            "prompts": self.prompts,
+            "session1_name": self.session1_name,
+            "session2_name": self.session2_name,
+            "session1": serialize_batch_result(self.session1),
+            "session2": serialize_batch_result(self.session2)
+        }
+        
+        # Save to file
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        return os.path.abspath(filename)
     
     def print(self) -> str:
         """Print and return comparison results."""
