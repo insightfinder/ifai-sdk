@@ -89,10 +89,6 @@ class BatchComparisonResult:
                         "is_passed": resp.is_passed
                     }
                 }
-                
-                # Only include history if it's not empty
-                if resp.history:
-                    response_data["history"] = resp.history
                     
                 responses_data.append(response_data)
             
