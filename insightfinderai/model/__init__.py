@@ -6,10 +6,12 @@ from .evaluation_result import EvaluationResult
 from .chat_response import ChatResponse
 from .batch_evaluation_result import BatchEvaluationResult
 from .batch_chat_result import BatchChatResult
+from .batch_comparison_result import BatchComparisonResult
 
 __all__ = [
     'EvaluationResult',
     'ChatResponse',
     'BatchEvaluationResult',
-    'BatchChatResult'
+    'BatchChatResult',
+    'BatchComparisonResult'
 ]
