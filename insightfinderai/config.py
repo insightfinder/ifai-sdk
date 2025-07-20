@@ -8,6 +8,7 @@ CLEAR_SYSTEM_PROMPT_ENDPOINT = "api/external/v1/chatbot/sysprompt/clear-syspromp
 NEW_CHAT_SESSION_ENDPOINT = "api/external/v1/chatbot/new-chat-session"
 TRACE_PROJECT_NAME_ENDPOINT = "api/external/v1/chatbot/get-trace-project-name-v2"
 MODEL_INFO_ENDPOINT = "api/external/v1/chatbot/model-info"
+MODEL_INFO_LIST_ENDPOINT = "api/external/v1/chatbot/model-info-list"
 
 # Evaluation endpoints
 EVALUATION_ENDPOINT = "api/external/v1/evaluation/bias-hallu"
