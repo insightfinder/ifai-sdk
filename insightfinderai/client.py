@@ -5,7 +5,6 @@ import uuid
 import time
 import os
 from typing import List, Optional, Union, Callable, Any, Dict
-from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import (
     DEFAULT_API_URL, 
@@ -18,7 +17,7 @@ from .config import (
     TRACE_PROJECT_NAME_ENDPOINT, 
     MODEL_INFO_ENDPOINT
 )
-from .model import EvaluationResult, ChatResponse, BatchEvaluationResult, BatchChatResult, BatchComparisonResult
+from .model import EvaluationResult, ChatResponse, BatchEvaluationResult, BatchChatResult, BatchComparisonResult, SessionTokenUsage
 import threading
 
 logger = logging.getLogger(__name__)
@@ -217,6 +216,31 @@ class Client:
             Dict[str, str]: Dictionary mapping session names to project names
         """
         return self._project_name_cache.copy()
+
+
+    def token_usage(self, session_name: Optional[str] = None) -> SessionTokenUsage:
+        session_name = session_name or self.session_name
+        data = {
+            "userCreatedModelName": session_name
+        }
+
+        try:
+            response = requests.post(
+                self.model_info_url,
+                headers=self._get_headers(),
+                json=data
+            )
+
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model info API error {response.status_code}: {response.text}")
+
+            result_data = response.json()
+
+            return SessionTokenUsage(result_data['inputTokens'],result_data['outputTokens'])
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Failed to get session info: {str(e)}")
+
 
     def _get_model_info(self, session_name: Optional[str] = None) -> Dict[str, str]:
         """
