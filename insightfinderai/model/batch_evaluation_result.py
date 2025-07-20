@@ -1,6 +1,9 @@
 """
 BatchEvaluationResult model for the InsightFinder AI SDK.
 """
+import json
+import os
+from datetime import datetime
 from typing import List, Optional, Union, Dict, Any
 from .evaluation_result import EvaluationResult
 
@@ -56,7 +59,60 @@ class BatchEvaluationResult:
             'failed_evaluations': failed_evaluations,
             'top_failed_evaluation': top_failed_evaluation
         }
-    
+
+    def save(self, filename: Optional[str] = None) -> str:
+        """Save the batch evaluation result to a JSON file.
+        
+        Args:
+            filename: Optional filename. If not provided, auto-generates one.
+                     Can be just a name like "evaluations" or include .json extension.
+        
+        Returns:
+            The full path of the saved file.
+        """
+        # Generate filename if not provided
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"batch_evaluation_result_{timestamp}.json"
+        elif not filename.endswith('.json'):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{filename}_{timestamp}.json"
+        
+        # Prepare the data to save - convert EvaluationResult objects to dictionaries
+        evaluations_data = []
+        
+        # Get common model info from first evaluation (assuming all use same model)
+        first_eval = self.evaluations[0] if self.evaluations else None
+        
+        for eval_result in self.evaluations:
+            evaluation_data = {
+                "prompt": eval_result.prompt,
+                "response": eval_result.response,
+                "evaluations": eval_result.evaluations,
+                "summary": eval_result.summary,
+                "metadata": {
+                    "trace_id": eval_result.trace_id,
+                    "is_passed": eval_result.is_passed
+                }
+            }
+            evaluations_data.append(evaluation_data)
+        
+        data = {
+            "type": "batch_evaluation_result",
+            "timestamp": datetime.now().isoformat(),
+            "model": first_eval.model if first_eval else None,
+            "model_version": first_eval.model_version if first_eval else None,
+            "summary": self.summary,
+            "is_passed": self.is_passed,
+            "evaluations": evaluations_data
+        }
+        
+        # Save to file
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        return os.path.abspath(filename)
+
     @property
     def prompt(self) -> List[str]:
         """Get all prompts from the batch evaluations."""
@@ -70,22 +126,62 @@ class BatchEvaluationResult:
     
     def __str__(self):
         """Format batch evaluation results for display."""
-        result = "[Batch Evaluation Results]\n"
-        result += f"Total Prompts     : {self.summary['total_prompts']}\n"
-        result += f"Passed Evaluations: {self.summary['passed_evaluations']}\n"
-        result += f"Failed Evaluations: {self.summary['failed_evaluations']}\n"
+        if not self.evaluations:
+            return "[Batch Evaluation Results]\nNo evaluations available."
         
-        if self.summary['top_failed_evaluation']:
-            top_failed = self.summary['top_failed_evaluation']
-            if isinstance(top_failed, list):
-                result += f"Top Failed        : {', '.join(top_failed)}\n"
-            else:
-                result += f"Top Failed        : {top_failed}\n"
+        result = ""
         
-        result += "\n" + "="*60 + "\n\n"
-        
+        # Display each evaluation
         for i, eval_result in enumerate(self.evaluations, 1):
             result += f"--- Evaluation {i} ---\n"
-            result += str(eval_result) + "\n\n"
+            
+            # Display prompt
+            if eval_result.prompt:
+                result += "Prompt:\n"
+                result += f">> {eval_result.prompt}\n\n"
+            
+            # Display response if available
+            if eval_result.response:
+                result += "Response:\n"
+                result += f">> {eval_result.response}\n\n"
+            
+            # Display evaluations
+            if eval_result.evaluations:
+                result += "Evaluations:\n"
+                result += "-" * 40 + "\n"
+                
+                for j, eval_item in enumerate(eval_result.evaluations, 1):
+                    eval_type = eval_item.get('evaluationType', 'Unknown')
+                    score = eval_item.get('score', 0)
+                    explanation = eval_item.get('explanation', 'No explanation provided')
+                    
+                    result += f"{j}. Type        : {eval_type}\n"
+                    result += f"   Score       : {score}\n"
+                    result += f"   Explanation : {explanation}\n"
+                    if j < len(eval_result.evaluations):
+                        result += "\n"
+            else:
+                result += "Evaluations:\n"
+                result += "-" * 40 + "\n"
+                result += "PASSED"
+            
+            result += "\n\n"
+        
+        # Add evaluation summary
+        result += "Evaluation Summary\n"
+        result += "-" * 66 + "\n"
+        result += f"Total prompts: {self.summary['total_prompts']}\n"
+        result += f"Passed evaluations: {self.summary['passed_evaluations']}\n"
+        result += f"Failed evaluations: {self.summary['failed_evaluations']}\n"
+        
+        # Always show Top Failed Evaluation line
+        if self.summary['top_failed_evaluation']:
+            if isinstance(self.summary['top_failed_evaluation'], list):
+                top_failed = ', '.join(self.summary['top_failed_evaluation'])
+            else:
+                top_failed = self.summary['top_failed_evaluation']
+            result += f"Top Failed Evaluation: {top_failed}\n"
+        else:
+            result += f"Top Failed Evaluation: -\n"
         
         return result

@@ -1,17 +1,22 @@
 """
 EvaluationResult model for the InsightFinder AI SDK.
 """
+import json
+import os
+from datetime import datetime
 from typing import List, Optional, Union, Dict, Any
 
 
 class EvaluationResult:
     """Represents an evaluation result with formatted display and object access."""
     
-    def __init__(self, evaluation_data: dict, trace_id: Optional[str] = None, prompt: Optional[str] = None, response: Optional[str] = None):
+    def __init__(self, evaluation_data: dict, trace_id: Optional[str] = None, prompt: Optional[str] = None, response: Optional[str] = None, model: Optional[str] = None, model_version: Optional[str] = None):
         self.evaluations = evaluation_data.get('evaluations', [])
         self.trace_id = trace_id or evaluation_data.get('traceId', '')
         self.prompt = prompt
         self.response = response
+        self.model = model
+        self.model_version = model_version
         self.is_passed = not self.evaluations  # True if no evaluations (empty list = passed)
         self.summary = self._generate_summary()
     
@@ -52,6 +57,46 @@ class EvaluationResult:
             'failed_evaluations': failed_evaluations,
             'top_failed_evaluation': top_failed_evaluation
         }
+
+    def save(self, filename: Optional[str] = None) -> str:
+        """Save the evaluation result to a JSON file.
+        
+        Args:
+            filename: Optional filename. If not provided, auto-generates one.
+                     Can be just a name like "evaluations" or include .json extension.
+        
+        Returns:
+            The full path of the saved file.
+        """
+        # Generate filename if not provided
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"evaluation_result_{timestamp}.json"
+        elif not filename.endswith('.json'):
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{filename}_{timestamp}.json"
+        
+        # Prepare the data to save
+        data = {
+            "type": "evaluation_result",
+            "timestamp": datetime.now().isoformat(),
+            "model": self.model,
+            "model_version": self.model_version,
+            "metadata": {
+                "trace_id": self.trace_id,
+                "is_passed": self.is_passed
+            },
+            "prompt": self.prompt,
+            "response": self.response,
+            "evaluations": self.evaluations,
+            "summary": self.summary
+        }
+        
+        # Save to file
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        return os.path.abspath(filename)
     
     def print(self) -> str:
         """Print and return evaluation results for clean display."""
@@ -62,8 +107,8 @@ class EvaluationResult:
     def __str__(self):
         """Format evaluation results for clean display."""
         result = "[Evaluation Results]\n"
-        result += f"Trace ID : {self.trace_id}\n"
-        result += "\n"
+        # result += f"Trace ID : {self.trace_id}\n"  # Commented out as requested
+        # result += "\n"
         
         # Always show prompt and response if available
         if self.prompt:
