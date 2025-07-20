@@ -385,6 +385,8 @@ class Client:
             trace_id = None
             evaluation_buffer = ""  # Buffer to accumulate evaluation JSON
             in_evaluation_block = False
+            prompt_token = 0
+            response_token = 0
             
             for line in response.iter_lines(decode_unicode=True):    
                 if line and line.startswith('data:'):
@@ -397,6 +399,11 @@ class Client:
                             # Extract metadata
                             if "id" in chunk:
                                 trace_id = chunk["id"]
+
+                            # Extract prompt / response token usage
+                            if 'inputOutputTokenPair' in chunk:
+                                prompt_token = chunk['inputOutputTokenPair']['inputTokens']
+                                response_token = chunk['inputOutputTokenPair']['outputTokens']
                                 
                             # Process content
                             if "choices" in chunk:
@@ -463,7 +470,9 @@ class Client:
                 raw_chunks=results,
                 enable_evaluations=self.enable_evaluations,
                 project_name=project_name,
-                session_name=effective_session_name
+                session_name=effective_session_name,
+                prompt_token=prompt_token,
+                response_token=response_token
             )
             
             return chat_response
