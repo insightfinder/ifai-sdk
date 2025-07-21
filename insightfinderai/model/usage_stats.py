@@ -15,4 +15,4 @@ Organization consumption status:
         return output
 
     def __str__(self):
-        self.print()
+        return self.print()
