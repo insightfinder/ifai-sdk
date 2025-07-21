@@ -4,6 +4,7 @@ DEFAULT_API_URL = "https://ai.insightfinder.com"
 # Chatbot endpoints
 CHATBOT_ENDPOINT = "api/external/v1/chatbot/stream-with-type"
 SET_SYSTEM_PROMPT_ENDPOINT = "api/external/v1/chatbot/sysprompt/get-sysprompt"
+APPLY_SYSTEM_PROMPT_ENDPOINT = "api/external/v1/chatbot/sysprompt/apply-sysprompt"
 CLEAR_SYSTEM_PROMPT_ENDPOINT = "api/external/v1/chatbot/sysprompt/clear-sysprompt"
 NEW_CHAT_SESSION_ENDPOINT = "api/external/v1/chatbot/new-chat-session"
 TRACE_PROJECT_NAME_ENDPOINT = "api/external/v1/chatbot/get-trace-project-name-v2"

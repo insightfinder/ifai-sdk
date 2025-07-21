@@ -10,6 +10,7 @@ from .config import (
     DEFAULT_API_URL, 
     CHATBOT_ENDPOINT,
     SET_SYSTEM_PROMPT_ENDPOINT,
+    APPLY_SYSTEM_PROMPT_ENDPOINT,
     CLEAR_SYSTEM_PROMPT_ENDPOINT,
     NEW_CHAT_SESSION_ENDPOINT,
     EVALUATION_ENDPOINT, 
@@ -115,6 +116,7 @@ class Client:
         # Construct API URLs
         self.chat_url = self.base_url + CHATBOT_ENDPOINT
         self.set_system_prompt_url = self.base_url + SET_SYSTEM_PROMPT_ENDPOINT
+        self.apply_system_prompt_url = self.base_url + APPLY_SYSTEM_PROMPT_ENDPOINT
         self.clear_system_prompt_url = self.base_url + CLEAR_SYSTEM_PROMPT_ENDPOINT
         self.new_chat_session_url = self.base_url + NEW_CHAT_SESSION_ENDPOINT
         self.evaluation_url = self.base_url + EVALUATION_ENDPOINT  
@@ -1057,7 +1059,73 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Failed to set system prompt: {str(e)}")
 
-    def clear_system_prompt(self, session_name: Optional[str] = None) -> ChatResponse:
+    def apply_system_prompt(self, prompt: str, session_name: Optional[str] = None) -> bool:
+        """
+        Directly apply a system prompt without evaluation using the apply-sysprompt endpoint.
+        
+        This function bypasses the evaluation process and directly applies the system prompt.
+        Use this when you want to force apply a system prompt without waiting for evaluation results.
+        
+        Args:
+            prompt (str): The system prompt to apply directly
+            session_name (Optional[str]): Session name to use. If None, uses the default session name.
+        
+        Returns:
+            bool: True if the system prompt was applied successfully, False otherwise
+            
+        Example:
+            success = client.apply_system_prompt("You are a helpful assistant that always responds in JSON format.")
+            if success:
+                print("System prompt applied successfully.")
+            else:
+                print("Failed to apply system prompt.")
+                
+            # With custom session name
+            success = client.apply_system_prompt("You are a helpful assistant.", session_name="custom-session")
+        """
+        if not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+            
+        effective_session_name = session_name or self.session_name
+        
+        # Get model info for the session
+        try:
+            model_info = self._get_model_info(effective_session_name)
+            model_type = model_info.get('modelType', 'Unknown')
+            model_version = model_info.get('modelVersion', 'Unknown')
+        except Exception as e:
+            logger.warning(f"Failed to get model info for apply_system_prompt: {e}")
+            model_type = 'Unknown'
+            model_version = 'Unknown'
+        
+        data = {
+            "prompt": prompt,
+            "modelType": model_type,
+            "modelVersion": model_version,
+            "userName": self.username,
+            "userCreatedModelName": effective_session_name
+        }
+        
+        try:
+            response = requests.post(
+                self.apply_system_prompt_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            
+            if not (200 <= response.status_code < 300):
+                logger.warning(f"Apply system prompt API error {response.status_code}: {response.text}")
+                return False
+            
+            # The API returns true or false as response
+            result = response.text.strip().lower()
+            return result == 'true'
+            
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to apply system prompt: {str(e)}")
+            return False
+
+    def clear_system_prompt(self, session_name: Optional[str] = None) -> bool:
         """
         Clear the system prompt by calling the clear API endpoint and setting it to an empty string.
         
@@ -1097,7 +1165,7 @@ class Client:
             logger.debug(f"Clear system prompt API request failed: {str(e)}")
         
         # Also call set_system_prompt with empty string to get the response
-        return self.set_system_prompt("", session_name)
+        return True
 
     def clear_context(self, session_name: Optional[str] = None) -> bool:
         """
