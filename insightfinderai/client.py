@@ -5,20 +5,29 @@ import uuid
 import time
 import os
 from typing import List, Optional, Union, Callable, Any, Dict
-from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import (
     DEFAULT_API_URL, 
-    CHATBOT_ENDPOINT, 
+    CHATBOT_ENDPOINT,
     SET_SYSTEM_PROMPT_ENDPOINT,
     CLEAR_SYSTEM_PROMPT_ENDPOINT,
     NEW_CHAT_SESSION_ENDPOINT,
     EVALUATION_ENDPOINT, 
     SAFETY_EVALUATION_ENDPOINT, 
     TRACE_PROJECT_NAME_ENDPOINT, 
-    MODEL_INFO_ENDPOINT
+    MODEL_INFO_ENDPOINT,
+    MODEL_INFO_LIST_ENDPOINT
 )
-from .model import EvaluationResult, ChatResponse, BatchEvaluationResult, BatchChatResult, BatchComparisonResult
+from .model import (
+    EvaluationResult,
+    ChatResponse,
+    BatchEvaluationResult,
+    BatchChatResult,
+    BatchComparisonResult,
+    SessionTokenUsage,
+    SessionList,
+    SessionMetadata)
+
 import threading
 
 logger = logging.getLogger(__name__)
@@ -109,6 +118,7 @@ class Client:
         self.safety_url = self.base_url + SAFETY_EVALUATION_ENDPOINT
         self.trace_project_name_url = self.base_url + TRACE_PROJECT_NAME_ENDPOINT
         self.model_info_url = self.base_url + MODEL_INFO_ENDPOINT
+        self.model_info_list_url = self.base_url + MODEL_INFO_LIST_ENDPOINT
         
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
@@ -217,6 +227,62 @@ class Client:
             Dict[str, str]: Dictionary mapping session names to project names
         """
         return self._project_name_cache.copy()
+
+    def list_sessions(self) -> SessionList:
+
+        try:
+            response = requests.post(
+                self.model_info_list_url,
+                headers=self._get_headers(),
+            )
+
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model info list API error {response.status_code}: {response.text}")
+
+            result_data = response.json()
+
+            result_list = SessionList()
+            for session_name in result_data:
+
+                session_data = SessionMetadata(
+                    name=session_name,
+                    model_type=result_data[session_name]['modelType'],
+                    model_version=result_data[session_name]['modelVersion'],
+                    token_usage=SessionTokenUsage(result_data[session_name]['inputTokens'],result_data[session_name]['outputTokens'])
+                )
+
+                result_list.sessions.append(session_data)
+
+
+            return result_list
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Failed to get session info: {str(e)}")
+
+
+    def token_usage(self, session_name: Optional[str] = None) -> SessionTokenUsage:
+        session_name = session_name or self.session_name
+        data = {
+            "userCreatedModelName": session_name
+        }
+
+        try:
+            response = requests.post(
+                self.model_info_url,
+                headers=self._get_headers(),
+                json=data
+            )
+
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model info API error {response.status_code}: {response.text}")
+
+            result_data = response.json()
+
+            return SessionTokenUsage(result_data['inputTokens'],result_data['outputTokens'])
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Failed to get session info: {str(e)}")
+
 
     def _get_model_info(self, session_name: Optional[str] = None) -> Dict[str, str]:
         """
@@ -385,6 +451,8 @@ class Client:
             trace_id = None
             evaluation_buffer = ""  # Buffer to accumulate evaluation JSON
             in_evaluation_block = False
+            prompt_token = 0
+            response_token = 0
             
             for line in response.iter_lines(decode_unicode=True):    
                 if line and line.startswith('data:'):
@@ -397,6 +465,11 @@ class Client:
                             # Extract metadata
                             if "id" in chunk:
                                 trace_id = chunk["id"]
+
+                            # Extract prompt / response token usage
+                            if 'inputOutputTokenPair' in chunk:
+                                prompt_token = chunk['inputOutputTokenPair']['inputTokens']
+                                response_token = chunk['inputOutputTokenPair']['outputTokens']
                                 
                             # Process content
                             if "choices" in chunk:
@@ -463,7 +536,9 @@ class Client:
                 raw_chunks=results,
                 enable_evaluations=self.enable_evaluations,
                 project_name=project_name,
-                session_name=effective_session_name
+                session_name=effective_session_name,
+                prompt_token=prompt_token,
+                response_token=response_token
             )
             
             return chat_response

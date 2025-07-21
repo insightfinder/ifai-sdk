@@ -7,11 +7,16 @@ from .chat_response import ChatResponse
 from .batch_evaluation_result import BatchEvaluationResult
 from .batch_chat_result import BatchChatResult
 from .batch_comparison_result import BatchComparisonResult
+from .session_token_usage import SessionTokenUsage
+from .session_list import SessionList,SessionMetadata
 
 __all__ = [
     'EvaluationResult',
     'ChatResponse',
     'BatchEvaluationResult',
     'BatchChatResult',
-    'BatchComparisonResult'
+    'BatchComparisonResult',
+    'SessionTokenUsage',
+    'SessionList',
+    'SessionMetadata'
 ]

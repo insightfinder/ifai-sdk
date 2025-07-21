@@ -8,7 +8,7 @@ from .evaluation_result import EvaluationResult
 class ChatResponse:
     """Represents a chat response with formatted display and object access."""
     
-    def __init__(self, response: str, prompt: Optional[Union[str, List[Dict[str, str]]]] = None, evaluations: Optional[List[dict]] = None, trace_id: Optional[str] = None, model: Optional[str] = None, model_version: Optional[str] = None, raw_chunks: Optional[List] = None, enable_evaluations: bool = False, project_name: Optional[str] = None, session_name: Optional[str] = None):
+    def __init__(self, response: str, prompt: Optional[Union[str, List[Dict[str, str]]]] = None, evaluations: Optional[List[dict]] = None, trace_id: Optional[str] = None, model: Optional[str] = None, model_version: Optional[str] = None, raw_chunks: Optional[List] = None, enable_evaluations: bool = False, project_name: Optional[str] = None, session_name: Optional[str] = None, prompt_token: Optional[int] = None, response_token: Optional[int] = None):
         self.response = response
         self.prompt = prompt
         # Convert prompt to string for evaluation result if it's a list
@@ -26,6 +26,8 @@ class ChatResponse:
         self.session_name = session_name
         self.raw_chunks = raw_chunks or []
         self.is_passed = self._evaluation_result is None or self._evaluation_result.is_passed
+        self.prompt_token = prompt_token or 0
+        self.response_token = response_token or 0
         # system_prompt_applied will be set dynamically only for set_system_prompt responses
 
     def _format_prompt_for_display(self) -> str:
