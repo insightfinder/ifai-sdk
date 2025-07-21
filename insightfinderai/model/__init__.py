@@ -9,6 +9,7 @@ from .batch_chat_result import BatchChatResult
 from .batch_comparison_result import BatchComparisonResult
 from .session_token_usage import SessionTokenUsage
 from .session_list import SessionList,SessionMetadata
+from .usage_stats import UsageStats
 
 __all__ = [
     'EvaluationResult',
@@ -18,5 +19,6 @@ __all__ = [
     'BatchComparisonResult',
     'SessionTokenUsage',
     'SessionList',
-    'SessionMetadata'
+    'SessionMetadata',
+    'UsageStats'
 ]

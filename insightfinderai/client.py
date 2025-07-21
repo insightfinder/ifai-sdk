@@ -16,7 +16,8 @@ from .config import (
     SAFETY_EVALUATION_ENDPOINT, 
     TRACE_PROJECT_NAME_ENDPOINT, 
     MODEL_INFO_ENDPOINT,
-    MODEL_INFO_LIST_ENDPOINT
+    MODEL_INFO_LIST_ENDPOINT,
+    ORG_TOKEN_USAGE_ENDPOINT
 )
 from .model import (
     EvaluationResult,
@@ -26,7 +27,9 @@ from .model import (
     BatchComparisonResult,
     SessionTokenUsage,
     SessionList,
-    SessionMetadata)
+    SessionMetadata,
+    UsageStats
+)
 
 import threading
 
@@ -119,6 +122,7 @@ class Client:
         self.trace_project_name_url = self.base_url + TRACE_PROJECT_NAME_ENDPOINT
         self.model_info_url = self.base_url + MODEL_INFO_ENDPOINT
         self.model_info_list_url = self.base_url + MODEL_INFO_LIST_ENDPOINT
+        self.org_token_usage_url = self.base_url + ORG_TOKEN_USAGE_ENDPOINT
         
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
@@ -282,6 +286,24 @@ class Client:
 
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Failed to get session info: {str(e)}")
+
+    def usage_stats(self):
+        try:
+            response = requests.post(
+                self.org_token_usage_url,
+                headers=self._get_headers(),
+            )
+
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Organization token usage API error {response.status_code}: {response.text}")
+
+            result_data = response.json()
+
+            return UsageStats(result_data['totalInputTokens'],result_data['totalOutputTokens'],result_data['totalTokenLimit'])
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Failed to get organization token usage info: {str(e)}")
+
 
 
     def _get_model_info(self, session_name: Optional[str] = None) -> Dict[str, str]:

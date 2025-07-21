@@ -13,3 +13,6 @@ MODEL_INFO_LIST_ENDPOINT = "api/external/v1/chatbot/model-info-list"
 # Evaluation endpoints
 EVALUATION_ENDPOINT = "api/external/v1/evaluation/bias-hallu"
 SAFETY_EVALUATION_ENDPOINT = "api/external/v1/evaluation/safety"
+
+# Other endpoints
+ORG_TOKEN_USAGE_ENDPOINT = "api/external/v1/llm-labs/current-token-map"
