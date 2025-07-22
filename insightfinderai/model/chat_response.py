@@ -75,7 +75,7 @@ class ChatResponse:
             result += "\n"
         
         result += "Response:\n"
-        result += f">> {self.response}\n"
+        result += f">> {self._clean_response_content(self.response)}\n"
         
         # Show evaluations if they exist and enable_evaluations was enabled
         if self.evaluations and self._evaluation_result:
@@ -87,3 +87,62 @@ class ChatResponse:
             result += "PASSED"
         
         return result
+    
+    def _clean_response_content(self, content: str) -> str:
+        """
+        Clean response content to handle encoding issues and malformed characters.
+        This is only used for display purposes in __str__ method.
+        
+        Args:
+            content (str): Raw content from the API response
+            
+        Returns:
+            str: Cleaned content safe for terminal display
+        """
+        if not content:
+            return content
+        
+        try:
+            # Fix common encoding issues
+            cleaned = content
+            
+            # Replace common malformed characters caused by encoding issues
+            replacements = {
+                'â': '"',  # Fix malformed quotes
+                'â': '"',  # Fix malformed quotes  
+                'â': "'",  # Fix malformed apostrophes
+                'â': '-',  # Fix malformed dashes
+                'â': '-',  # Fix malformed dashes
+                'â¦': '...',  # Fix malformed ellipsis
+                'â¢': '•',  # Fix malformed bullets
+                'âº': '→',  # Fix malformed arrows
+                'â¹': '←',  # Fix malformed arrows
+                'Â': '',   # Remove unnecessary characters
+                'Ã': '',   # Remove unnecessary characters
+            }
+            
+            for bad_char, good_char in replacements.items():
+                cleaned = cleaned.replace(bad_char, good_char)
+            
+            # Remove control characters that might cause terminal issues
+            import string
+            printable_chars = set(string.printable)
+            # Allow common unicode characters but filter out control chars
+            cleaned = ''.join(
+                char for char in cleaned 
+                if char in printable_chars or (ord(char) > 127 and char.isprintable())
+            )
+            
+            # Ensure proper encoding - handle any remaining encoding issues
+            cleaned = cleaned.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
+            
+            return cleaned
+            
+        except Exception as e:
+            # If cleaning fails, return a safe fallback
+            try:
+                # Fallback: just ensure it's safe ASCII and remove problematic chars
+                safe_content = ''.join(char for char in content if ord(char) < 128 and char.isprintable())
+                return safe_content if safe_content else "[Content encoding error]"
+            except:
+                return "[Content encoding error]"

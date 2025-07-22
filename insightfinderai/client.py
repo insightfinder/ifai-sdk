@@ -532,11 +532,10 @@ class Client:
                                             # Not complete JSON yet, continue accumulating
                                             pass
                                     else:
-                                        # Regular response content - clean and filter the content
-                                        cleaned_content = self._clean_response_content(content)
-                                        stitched_response += cleaned_content
-                                        if stream and cleaned_content:
-                                            print(cleaned_content, end='', flush=True)
+                                        # Regular response content
+                                        stitched_response += content
+                                        if stream and content:
+                                            print(content, end='', flush=True)
                         except json.JSONDecodeError as je:
                             logger.warning(f"Failed to parse JSON chunk: {je}")
                             pass
@@ -556,7 +555,7 @@ class Client:
             
             # Create response object
             chat_response = ChatResponse(
-                response=self._clean_response_content(stitched_response),
+                response=stitched_response,
                 prompt=prompt_for_display,
                 evaluations=evaluations if self.enable_evaluations else None,
                 trace_id=trace_id,
@@ -1217,62 +1216,3 @@ class Client:
             # If request fails, return True as fallback
             logger.warning(f"Clear context API request failed: {str(e)}, assuming success")
             return True
-
-    def _clean_response_content(self, content: str) -> str:
-        """
-        Clean response content to handle encoding issues and malformed characters.
-        
-        Args:
-            content (str): Raw content from the API response
-            
-        Returns:
-            str: Cleaned content safe for terminal display
-        """
-        if not content:
-            return content
-        
-        try:
-            # Fix common encoding issues
-            cleaned = content
-            
-            # Replace common malformed characters caused by encoding issues
-            replacements = {
-                'â': '"',  # Fix malformed quotes
-                'â': '"',  # Fix malformed quotes  
-                'â': "'",  # Fix malformed apostrophes
-                'â': '-',  # Fix malformed dashes
-                'â': '-',  # Fix malformed dashes
-                'â¦': '...',  # Fix malformed ellipsis
-                'â¢': '•',  # Fix malformed bullets
-                'âº': '→',  # Fix malformed arrows
-                'â¹': '←',  # Fix malformed arrows
-                'Â': '',   # Remove unnecessary characters
-                'Ã': '',   # Remove unnecessary characters
-            }
-            
-            for bad_char, good_char in replacements.items():
-                cleaned = cleaned.replace(bad_char, good_char)
-            
-            # Remove control characters that might cause terminal issues
-            import string
-            printable_chars = set(string.printable)
-            # Allow common unicode characters but filter out control chars
-            cleaned = ''.join(
-                char for char in cleaned 
-                if char in printable_chars or (ord(char) > 127 and char.isprintable())
-            )
-            
-            # Ensure proper encoding - handle any remaining encoding issues
-            cleaned = cleaned.encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')
-            
-            return cleaned
-            
-        except Exception as e:
-            # If cleaning fails, return a safe fallback
-            logger.warning(f"Failed to clean response content: {e}")
-            try:
-                # Fallback: just ensure it's safe ASCII and remove problematic chars
-                safe_content = ''.join(char for char in content if ord(char) < 128 and char.isprintable())
-                return safe_content if safe_content else "[Content encoding error]"
-            except:
-                return "[Content encoding error]"
