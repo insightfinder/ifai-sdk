@@ -11,13 +11,14 @@ from .chat_response import ChatResponse
 class BatchChatResult:
     """Represents batch chat results with object access."""
     
-    def __init__(self, chat_responses: List[ChatResponse]):
+    def __init__(self, chat_responses: List[ChatResponse], enable_evaluation: bool = True):
         self.response = chat_responses
         self.evaluations = [resp.evaluations for resp in chat_responses if resp.evaluations]
         self.history = []  # Batch chat typically doesn't maintain conversation history
         # self.summary = self._generate_summary()
         self.evaluation_summary = self._generate_evaluation_summary()
         self.is_passed = all(resp.is_passed for resp in chat_responses)
+        self.enable_evaluation = enable_evaluation
     
     # def _generate_summary(self) -> Dict[str, Any]:
     #     """Generate summary statistics for batch chat."""
@@ -155,58 +156,59 @@ class BatchChatResult:
             
             result += "\nResponse:\n"
             result += f">> {chat_response.response}\n\n"
-        
-        # Display evaluations section
-        result += "Evaluations:\n"
-        result += "-" * 56 + "\n"
-        
-        for i, chat_response in enumerate(self.response, 1):
-            # Get prompt text for evaluation header
-            if isinstance(chat_response.prompt, list):
-                # Extract last user message for header
-                prompt_text = "Conversation"
-                for msg in reversed(chat_response.prompt):
-                    if msg.get('role') == 'user':
-                        prompt_text = msg.get('content', 'Conversation')[:50]
-                        if len(msg.get('content', '')) > 50:
-                            prompt_text += "..."
-                        break
+
+        if self.enable_evaluation:
+            # Display evaluations section
+            result += "Evaluations:\n"
+            result += "-" * 56 + "\n"
+
+            for i, chat_response in enumerate(self.response, 1):
+                # Get prompt text for evaluation header
+                if isinstance(chat_response.prompt, list):
+                    # Extract last user message for header
+                    prompt_text = "Conversation"
+                    for msg in reversed(chat_response.prompt):
+                        if msg.get('role') == 'user':
+                            prompt_text = msg.get('content', 'Conversation')[:50]
+                            if len(msg.get('content', '')) > 50:
+                                prompt_text += "..."
+                            break
+                else:
+                    prompt_text = str(chat_response.prompt)[:50]
+                    if len(str(chat_response.prompt)) > 50:
+                        prompt_text += "..."
+
+                result += f"-- Evaluations for Prompt {i}: {prompt_text} --\n"
+
+                # Display evaluations for this prompt
+                if chat_response.evaluations and chat_response._evaluation_result:
+                    eval_content = chat_response._evaluation_result.format_for_chat()
+                    # Remove the "Evaluations:" header since we have our own
+                    eval_lines = eval_content.split('\n')
+                    if eval_lines[0].strip() == "Evaluations:":
+                        eval_lines = eval_lines[2:]  # Skip "Evaluations:" and separator line
+                    result += '\n'.join(eval_lines) + "\n\n"
+                elif chat_response.enable_evaluations:
+                    result += "PASSED\n\n"
+                else:
+                    result += "No evaluations\n\n"
+
+            # Add evaluation summary
+            eval_summary = self.evaluation_summary
+            result += "Evaluation Summary\n"
+            result += "-" * 66 + "\n"
+            result += f"Total prompts: {eval_summary['total_prompts']}\n"
+            result += f"Passed evaluations: {eval_summary['passed_evaluations']}\n"
+            result += f"Failed evaluations: {eval_summary['failed_evaluations']}\n"
+
+            # Always show Top Failed Evaluation line
+            if eval_summary['top_failed_evaluation']:
+                if isinstance(eval_summary['top_failed_evaluation'], list):
+                    top_failed = ', '.join(eval_summary['top_failed_evaluation'])
+                else:
+                    top_failed = eval_summary['top_failed_evaluation']
+                result += f"Top Failed Evaluation: {top_failed}\n"
             else:
-                prompt_text = str(chat_response.prompt)[:50]
-                if len(str(chat_response.prompt)) > 50:
-                    prompt_text += "..."
-            
-            result += f"-- Evaluations for Prompt {i}: {prompt_text} --\n"
-            
-            # Display evaluations for this prompt
-            if chat_response.evaluations and chat_response._evaluation_result:
-                eval_content = chat_response._evaluation_result.format_for_chat()
-                # Remove the "Evaluations:" header since we have our own
-                eval_lines = eval_content.split('\n')
-                if eval_lines[0].strip() == "Evaluations:":
-                    eval_lines = eval_lines[2:]  # Skip "Evaluations:" and separator line
-                result += '\n'.join(eval_lines) + "\n\n"
-            elif chat_response.enable_evaluations:
-                result += "PASSED\n\n"
-            else:
-                result += "No evaluations\n\n"
-        
-        # Add evaluation summary
-        eval_summary = self.evaluation_summary
-        result += "Evaluation Summary\n"
-        result += "-" * 66 + "\n"
-        result += f"Total prompts: {eval_summary['total_prompts']}\n"
-        result += f"Passed evaluations: {eval_summary['passed_evaluations']}\n"
-        result += f"Failed evaluations: {eval_summary['failed_evaluations']}\n"
-        
-        # Always show Top Failed Evaluation line
-        if eval_summary['top_failed_evaluation']:
-            if isinstance(eval_summary['top_failed_evaluation'], list):
-                top_failed = ', '.join(eval_summary['top_failed_evaluation'])
-            else:
-                top_failed = eval_summary['top_failed_evaluation']
-            result += f"Top Failed Evaluation: {top_failed}\n"
-        else:
-            result += f"Top Failed Evaluation: -\n"
+                result += f"Top Failed Evaluation: -\n"
         
         return result

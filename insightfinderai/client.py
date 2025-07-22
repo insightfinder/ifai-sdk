@@ -603,6 +603,9 @@ class Client:
         """
         if not prompts:
             raise ValueError("Prompts list cannot be empty")
+
+        if enable_evaluation is None:
+            enable_evaluation = self.enable_evaluations
         
         def process_single_chat(prompt_data):
             idx, prompt = prompt_data
@@ -631,7 +634,7 @@ class Client:
         
         # Filter out None results and return BatchChatResult
         valid_results = [r for r in results if r is not None]
-        return BatchChatResult(valid_results)
+        return BatchChatResult(valid_results, enable_evaluation=enable_evaluation)
 
     def evaluate(self, prompt: str, response: str, trace_id: Optional[str] = None, session_name: Optional[str] = None) -> EvaluationResult:
         """
