@@ -12,7 +12,7 @@ Organization consumption status:
 - Total token limit: {self.total_token_limit}
 - Consumption percentage: {self.total_token_usage}%
 """
-        print(output)
+        return output
 
     def __str__(self):
-        self.print()
+        return self.print()
