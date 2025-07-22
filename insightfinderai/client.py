@@ -372,7 +372,7 @@ class Client:
         """
         return self._model_info_cache.copy()
 
-    def chat(self, messages: Union[str, List[Dict[str, str]]], stream: bool = False, chat_history: bool = True, session_name: Optional[str] = None) -> ChatResponse:
+    def chat(self, messages: Union[str, List[Dict[str, str]]], stream: bool = False, chat_history: bool = True, enable_evaluation: bool = None, session_name: Optional[str] = None) -> ChatResponse:
         """
         Send a chat message and get response. Supports both simple strings and conversation history.
         
@@ -386,6 +386,7 @@ class Client:
             chat_history (bool): Whether to use conversation history (default: True)
                 - If True: Uses conversation history (withHistory=true in API)
                 - If False: Disables conversation history (withHistory=false in API)
+            enable_evaluation (bool): Whether to enable evaluation (default: None)
             session_name (Optional[str]): Session name to use for this request. If None, uses the default session name.
         
         Returns:
@@ -449,12 +450,17 @@ class Client:
         except Exception:
             # If project name retrieval fails, continue without it
             pass
+
+        if enable_evaluation is None:
+            enable_evaluation = self.enable_evaluations
+
         
         # Prepare request data (using 'prompt' as per the original API)
         data = {
             'prompt': prompt_for_api,
             'userCreatedModelName': effective_session_name,
-            'withHistory': chat_history  # Add withHistory parameter based on chat_history
+            'withHistory': chat_history,  # Add withHistory parameter based on chat_history
+            'doEvaluation': enable_evaluation
         }
         
         try:
@@ -553,12 +559,12 @@ class Client:
             chat_response = ChatResponse(
                 response=stitched_response,
                 prompt=prompt_for_display,
-                evaluations=evaluations if self.enable_evaluations else None,
+                evaluations=evaluations if enable_evaluation else None,
                 trace_id=trace_id,
                 model=model_type,
                 model_version=model_version,
                 raw_chunks=results,
-                enable_evaluations=self.enable_evaluations,
+                enable_evaluations=enable_evaluation,
                 project_name=project_name,
                 session_name=effective_session_name,
                 prompt_token=prompt_token,
