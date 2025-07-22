@@ -576,7 +576,7 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Request failed: {str(e)}")
 
-    def batch_chat(self, prompts: List[str], stream: bool = False, max_workers: int = 3, session_name: Optional[str] = None) -> BatchChatResult:
+    def batch_chat(self, prompts: List[str], stream: bool = False, enable_evaluation: bool = None , max_workers: int = 3, session_name: Optional[str] = None) -> BatchChatResult:
         """
         Send multiple chat messages in parallel using multithreading with the regular chat API.
         
@@ -586,6 +586,7 @@ class Client:
         Args:
             prompts (List[str]): List of messages/questions
             stream (bool): Whether to show progress updates (default: False)
+            enable_evaluation (bool): Whether to enable evaluation (default: None)
             max_workers (int): Number of parallel requests (default: 3)
             session_name (Optional[str]): Session name to use for all requests. If None, uses the default session name.
         
@@ -605,7 +606,7 @@ class Client:
         
         def process_single_chat(prompt_data):
             idx, prompt = prompt_data
-            return idx, self.chat(prompt, stream=False, chat_history=False, session_name=session_name)
+            return idx, self.chat(prompt, stream=False, enable_evaluation=enable_evaluation,chat_history=False, session_name=session_name)
         
         # Execute in parallel using ThreadPoolExecutor
         results: List[Optional[ChatResponse]] = [None] * len(prompts)
