@@ -536,11 +536,7 @@ class Client:
                                         stitched_response += content
                                         if stream and content:
                                             print(content, end='', flush=True)
-                        except json.JSONDecodeError as je:
-                            logger.warning(f"Failed to parse JSON chunk: {je}")
-                            pass
-                        except Exception as e:
-                            logger.warning(f"Error processing streaming chunk: {e}")
+                        except:
                             pass
             
             # Get model info from dedicated API
