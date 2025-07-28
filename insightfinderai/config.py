@@ -11,6 +11,11 @@ TRACE_PROJECT_NAME_ENDPOINT = "api/external/v1/chatbot/get-trace-project-name-v2
 MODEL_INFO_ENDPOINT = "api/external/v1/chatbot/model-info"
 MODEL_INFO_LIST_ENDPOINT = "api/external/v1/chatbot/model-info-list"
 
+# Session management endpoints
+CREATE_SESSION_ENDPOINT = "api/external/v1/chatbot/new-chatbot"
+DELETE_SESSION_ENDPOINT = "api/external/v1/chatbot"
+SUPPORTED_MODELS_ENDPOINT = "api/external/v1/chatbot/supported-list"
+
 # Evaluation endpoints
 EVALUATION_ENDPOINT = "api/external/v1/evaluation/bias-hallu"
 SAFETY_EVALUATION_ENDPOINT = "api/external/v1/evaluation/safety"
