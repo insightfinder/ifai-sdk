@@ -18,7 +18,10 @@ from .config import (
     TRACE_PROJECT_NAME_ENDPOINT, 
     MODEL_INFO_ENDPOINT,
     MODEL_INFO_LIST_ENDPOINT,
-    ORG_TOKEN_USAGE_ENDPOINT
+    ORG_TOKEN_USAGE_ENDPOINT,
+    CREATE_SESSION_ENDPOINT,
+    DELETE_SESSION_ENDPOINT,
+    SUPPORTED_MODELS_ENDPOINT
 )
 from .model import (
     EvaluationResult,
@@ -126,11 +129,19 @@ class Client:
         self.model_info_list_url = self.base_url + MODEL_INFO_LIST_ENDPOINT
         self.org_token_usage_url = self.base_url + ORG_TOKEN_USAGE_ENDPOINT
         
+        # Session management URLs
+        self.create_session_url = self.base_url + CREATE_SESSION_ENDPOINT
+        self.delete_session_url = self.base_url + DELETE_SESSION_ENDPOINT
+        self.supported_models_url = self.base_url + SUPPORTED_MODELS_ENDPOINT
+        
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
         
         # Cache for model info to avoid repeated API calls
         self._model_info_cache: Dict[str, Dict[str, str]] = {}
+        
+        # Cache for supported models to avoid repeated API calls
+        self._supported_models_cache: Optional[List[str]] = None
         
         # Generate project name dynamically
         self.project_name = self._get_project_name()
@@ -1222,3 +1233,160 @@ class Client:
             # If request fails, return True as fallback
             logger.warning(f"Clear context API request failed: {str(e)}, assuming success")
             return True
+
+    def list_supported_models(self) -> List[str]:
+        """
+        Retrieve the list of supported models from the API.
+        The results are cached to avoid repeated API calls.
+        
+        Returns:
+            List[str]: A sorted list of supported models in the format "ModelType/ModelVersion"
+        
+        Example:
+            models = client.list_supported_models()
+            for model in models:
+                print(model)
+        """
+        # Return cached result if available
+        if self._supported_models_cache is not None:
+            return self._supported_models_cache
+        
+        try:
+            response = requests.get(
+                self.supported_models_url,
+                headers=self._get_headers()
+            )
+            
+            if response.status_code == 200:
+                models = response.json()
+                # Remove duplicates and sort
+                unique_models = list(set(models))
+                unique_models.sort()
+                
+                # Cache the result
+                self._supported_models_cache = unique_models
+                return unique_models
+            else:
+                logger.error(f"Failed to retrieve supported models: {response.status_code} - {response.text}")
+                return []
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error retrieving supported models: {str(e)}")
+            return []
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing supported models response: {str(e)}")
+            return []
+
+    def create_session(self, model_name: str, model_type: str, model_version: str, 
+                      description: Optional[str] = None, shared: bool = True, 
+                      auth_api_key: Optional[str] = None, auth_api_key_type: Optional[str] = None) -> bool:
+        """
+        Create a new LLM session with the specified model.
+        
+        Args:
+            model_name (str): User-created model name for the session
+            model_type (str): The model type (e.g., "OpenAI", "Meta LLaMA", etc.)
+            model_version (str): The model version (e.g., "gpt-4o", "Llama-3.1-8B-Instruct", etc.)
+            description (str, optional): Description for the session
+            shared (bool): Whether the session is shared (default: True)
+            auth_api_key (str, optional): Authentication API key
+            auth_api_key_type (str, optional): Type of authentication API key
+        
+        Returns:
+            bool: True if session was created successfully, False otherwise
+        
+        Example:
+            success = client.create_session(
+                model_name="my-gpt-session",
+                model_type="OpenAI",
+                model_version="gpt-4o",
+                description="My GPT-4 session"
+            )
+            if success:
+                print("Session created successfully")
+        """
+        # Validate required fields
+        if not model_name or not model_type or not model_version:
+            raise ValueError("model_name, model_type, and model_version are required")
+        
+        # Validate model_type and model_version against supported models
+        supported_models = self.list_supported_models()
+        expected_model_string = f"{model_type}/{model_version}"
+        
+        if expected_model_string not in supported_models:
+            raise ValueError(f"Model '{expected_model_string}' is not supported. "
+                           f"Use list_supported_models() to see available models.")
+        
+        # Prepare request body
+        data = {
+            "modelName": model_name,
+            "modelType": model_type,
+            "modelVersion": model_version,
+            "shared": shared
+        }
+        
+        # Add optional fields if provided
+        if description:
+            data["description"] = description
+        if auth_api_key:
+            data["authApiKey"] = auth_api_key
+        if auth_api_key_type:
+            data["authApiKeyType"] = auth_api_key_type
+        
+        try:
+            response = requests.post(
+                self.create_session_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"Session '{model_name}' created successfully")
+                return True
+            else:
+                logger.error(f"Failed to create session: {response.status_code} - {response.text}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error creating session: {str(e)}")
+            return False
+
+    def delete_session(self, user_created_model_name: str) -> bool:
+        """
+        Delete an existing LLM session.
+        
+        Args:
+            user_created_model_name (str): The name of the user-created model to delete
+        
+        Returns:
+            bool: True if session was deleted successfully, False otherwise
+        
+        Example:
+            success = client.delete_session("my-gpt-session")
+            if success:
+                print("Session deleted successfully")
+        """
+        if not user_created_model_name:
+            raise ValueError("user_created_model_name is required")
+        
+        data = {
+            "userCreatedModelName": user_created_model_name
+        }
+        
+        try:
+            response = requests.delete(
+                self.delete_session_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"Session '{user_created_model_name}' deleted successfully")
+                return True
+            else:
+                logger.error(f"Failed to delete session: {response.status_code} - {response.text}")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error deleting session: {str(e)}")
+            return False
