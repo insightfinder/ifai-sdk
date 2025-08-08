@@ -56,7 +56,7 @@ class Client:
     to ensure a clean starting state.
     """
 
-    def __init__(self, session_name: str, url: Optional[str] = None, username: Optional[str] = None, api_key: Optional[str] = None, enable_chat_evaluation: bool = True):
+    def __init__(self, session_name: str = None, url: Optional[str] = None, username: Optional[str] = None, api_key: Optional[str] = None, enable_chat_evaluation: bool = True):
         """
         Initialize the client with user credentials and project settings.
         
@@ -105,8 +105,8 @@ class Client:
             raise ValueError("Username must be provided either as parameter or INSIGHTFINDER_USERNAME environment variable")
         if not self.api_key:
             raise ValueError("API key must be provided either as parameter or INSIGHTFINDER_API_KEY environment variable")
-        if not session_name:
-            raise ValueError("Session name cannot be empty")
+        # if not session_name:
+        #     raise ValueError("Session name cannot be empty")
         
         self.session_name = session_name
         self.enable_evaluations = enable_chat_evaluation
@@ -213,7 +213,8 @@ class Client:
             )
             
             if not (200 <= response.status_code < 300):
-                raise ValueError(f"Trace project name API error {response.status_code}: {response.text}")
+                return None
+                #raise ValueError(f"Trace project name API error {response.status_code}: {response.text}")
             
             # The API returns raw text, not JSON
             trace_project_name = response.text.strip()
@@ -469,10 +470,15 @@ class Client:
         # Prepare request data (using 'prompt' as per the original API)
         data = {
             'prompt': prompt_for_api,
-            'userCreatedModelName': effective_session_name,
             'withHistory': chat_history,  # Add withHistory parameter based on chat_history
             'doEvaluation': enable_evaluation
         }
+
+        # Add session name if exists
+        if effective_session_name:
+            data['userCreatedModelName'] = effective_session_name
+        else:
+            data['userCreatedModelName'] = ""
         
         try:
             response = requests.post(

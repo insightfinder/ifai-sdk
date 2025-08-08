@@ -51,9 +51,9 @@ class ChatResponse:
     def __str__(self):
         """Format chat response for clean, user-friendly display."""
         result = "[Chat Response]\n"
-        # result += f"Trace ID      : {self.trace_id or 'N/A'}\n"  # Commented out as requested
-        result += f"Model         : {self.model or 'Unknown'}\n"
-        result += f"Model Version : {self.model_version or 'Unknown'}\n"
+        if self.session_name is not None:
+            result += f"Model         : {self.model or 'Unknown'}\n"
+            result += f"Model Version : {self.model_version or 'Unknown'}\n"
         
         # Show system prompt applied status if this is a system prompt response
         system_prompt_applied = getattr(self, 'system_prompt_applied', None)
