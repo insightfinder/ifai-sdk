@@ -568,7 +568,7 @@ class Client:
                 model_type = model_info.get('modelType', 'Unknown')
                 model_version = model_info.get('modelVersion', 'Unknown')
             except Exception as e:
-                logger.warning(f"Failed to get model info: {e}")
+                # logger.warning(f"Failed to get model info: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
             
@@ -707,7 +707,7 @@ class Client:
                 model_type = model_info.get('modelType', 'Unknown')
                 model_version = model_info.get('modelVersion', 'Unknown')
             except Exception as e:
-                logger.warning(f"Failed to get model info for evaluation: {e}")
+                # logger.warning(f"Failed to get model info for evaluation: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
             
@@ -820,7 +820,7 @@ class Client:
                 model_type = model_info.get('modelType', 'Unknown')
                 model_version = model_info.get('modelVersion', 'Unknown')
             except Exception as e:
-                logger.warning(f"Failed to get model info for safety evaluation: {e}")
+                # logger.warning(f"Failed to get model info for safety evaluation: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
             
@@ -1121,7 +1121,7 @@ class Client:
             model_type = model_info.get('modelType', 'Unknown')
             model_version = model_info.get('modelVersion', 'Unknown')
         except Exception as e:
-            logger.warning(f"Failed to get model info for apply_system_prompt: {e}")
+            # logger.warning(f"Failed to get model info for apply_system_prompt: {e}")
             model_type = 'Unknown'
             model_version = 'Unknown'
         
