@@ -12,32 +12,67 @@ pip install insightfinderai
 
 ### Basic Setup
 
+**Choose Your Setup Method:**
+
+**OPTION A: LLM Gateway (Recommended for most users)**
+- Use when you need high availability and automatic failover
+- Best for production applications requiring high uptime
+- Ideal for getting started quickly without session management
+- Perfect for prototyping and development
+- Key: Do NOT provide session_name to activate gateway
+
+**OPTION B: Specific Session**
+- Use when you need direct control over a specific model
+- Best for research requiring consistent model behavior
+- Ideal for testing specific model capabilities
+- Perfect for custom or fine-tuned models
+- Key: Provide session_name to bypass gateway
+
 ```python
 from insightfinderai import Client
 
-# Method 1: Provide credentials directly
+# OPTION A: LLM Gateway (Recommended for most users)
+# A1: Direct credentials
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+    # No session_name = Uses LLM Gateway
+)
+
+# A2: Environment variables (recommended for production)
+# Set environment variables to avoid credentials in code:
+# export INSIGHTFINDER_USERNAME="your_username"
+# export INSIGHTFINDER_API_KEY="your_api_key"
+client = Client()  # No session_name = Uses LLM Gateway
+
+# OPTION B: Specific Session (Advanced users)
+# B1: Direct credentials
 client = Client(
     session_name="my-ai-session",
     username="your_username",
     api_key="your_api_key",
-    enable_chat_evaluation=True  # Show evaluation results (default: True)
+    enable_chat_evaluation=True  # Default: True
 )
 
-# Method 2: Use environment variables
+# B2: Environment variables (recommended for production)
+# Set environment variables to avoid credentials in code:
 # export INSIGHTFINDER_USERNAME="your_username"
 # export INSIGHTFINDER_API_KEY="your_api_key"
 client = Client(session_name="my-ai-session")
-
-# Method 3: Use LLM Gateway with fallback models (no session_name required)
-# If session_name is not provided, the client will use the LLM Gateway service
-# where you can configure Primary LLM, First Backup LLM, and Second Backup LLM
-# The system will automatically fallback if the primary model fails
-client = Client(
-    username="your_username",
-    api_key="your_api_key",
-    enable_chat_evaluation=True
-)
 ```
+
+### 🤔 Which Method Should You Use?
+
+| Use Case | Recommended Method | Why? |
+|----------|-------------------|------|
+| **Getting Started** | Option A (LLM Gateway) | Automatic failover, no setup |
+| **Production Apps** | Option A (LLM Gateway) | High availability, cost optimization |
+| **Prototyping** | Option A (LLM Gateway) | Quick start, reliable |
+| **Model Testing** | Option B (Specific Session) | Control exact model behavior |
+| **Research** | Option B (Specific Session) | Consistent model responses |
+| **Custom Models** | Option B (Specific Session) | Use your fine-tuned models |
+
+**💡 Pro Tip**: Start with Option A (LLM Gateway). Only use Option B if you need specific model control.
 
 ## 📋 Table of Contents
 
@@ -53,7 +88,27 @@ client = Client(
 
 ## 🌐 LLM Gateway Service
 
-The LLM Gateway service provides automatic failover capabilities when you don't specify a `session_name`. This service allows you to configure multiple models with automatic fallback behavior.
+The LLM Gateway service provides automatic failover capabilities when you **don't specify a `session_name`**. This service allows you to configure multiple models with automatic fallback behavior.
+
+### 🔑 How to Activate LLM Gateway
+
+**Simple rule: Don't provide `session_name` when creating your client**
+
+```python
+# ✅ Uses LLM Gateway (recommended)
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+    # No session_name parameter = Gateway mode
+)
+
+# ❌ Does NOT use LLM Gateway
+client = Client(
+    session_name="my-session",  # This bypasses the gateway
+    username="your_username",
+    api_key="your_api_key"
+)
+```
 
 ### How It Works
 
@@ -82,6 +137,7 @@ response = client.chat("Hello world")
 - **No Code Changes**: Fallback is transparent to your application
 - **Centralized Configuration**: Manage model preferences in one place
 - **Cost Optimization**: Use cheaper backup models when primary is unavailable
+- **Zero Setup**: No need to create or manage sessions
 
 ## 💬 Chat Operations
 
@@ -365,22 +421,38 @@ result.print()
 
 ### LLM Gateway vs Session-Based Usage
 
+**The key difference is whether you provide `session_name` or not:**
+
 ```python
-# Option 1: Use LLM Gateway (automatic fallback, no session management needed)
+# 🌐 OPTION A: LLM Gateway (High Availability Mode)
+# ✅ Automatic failover between Primary → Backup1 → Backup2
+# ✅ 99.9% uptime
+# ✅ Cost optimization
+# ✅ Zero session management
 client = Client(
     username="your_username",
     api_key="your_api_key"
+    # KEY: No session_name = Gateway mode
 )
-# Automatically uses Primary → First Backup → Second Backup LLMs
 
-# Option 2: Use specific session (direct model access, no fallback)
+# 🎯 OPTION B: Direct Session (Specific Model Mode)  
+# ✅ Direct control over exact model
+# ✅ Consistent model behavior
+# ❌ No automatic failover
+# ❌ Manual session management required
 client = Client(
-    session_name="my-gpt-session",
+    session_name="my-gpt-session",  # KEY: session_name = Direct mode
     username="your_username", 
     api_key="your_api_key"
 )
-# Uses only the model configured for "my-gpt-session"
 ```
+
+**Decision Guide:**
+- **Need reliability?** → Use Option A (no session_name)
+- **Need specific model?** → Use Option B (with session_name)
+- **Just getting started?** → Use Option A (no session_name)
+- **Building production app?** → Use Option A (no session_name)
+- **Doing model research?** → Use Option B (with session_name)
 
 ### Custom API URL
 

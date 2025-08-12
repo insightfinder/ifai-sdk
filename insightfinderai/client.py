@@ -500,6 +500,7 @@ class Client:
             in_evaluation_block = False
             prompt_token = 0
             response_token = 0
+            stream_model = None  # Extract model from streaming data
             
             for line in response.iter_lines(decode_unicode=True):    
                 if line and line.startswith('data:'):
@@ -512,6 +513,10 @@ class Client:
                             # Extract metadata
                             if "id" in chunk:
                                 trace_id = chunk["id"]
+                            
+                            # Extract model from streaming data
+                            if "model" in chunk and not stream_model:
+                                stream_model = chunk["model"]
 
                             # Extract prompt / response token usage
                             if 'inputOutputTokenPair' in chunk:
@@ -571,6 +576,13 @@ class Client:
                 # logger.warning(f"Failed to get model info: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
+                
+                # Use streaming data as fallback if available
+                if stream_model:
+                    model_type = stream_model
+                    model_version = stream_model
+                    if not session_name:
+                        model_version = "LLM Gateway"
             
             # Create response object
             chat_response = ChatResponse(
