@@ -27,10 +27,21 @@ client = Client(
 # export INSIGHTFINDER_USERNAME="your_username"
 # export INSIGHTFINDER_API_KEY="your_api_key"
 client = Client(session_name="my-ai-session")
+
+# Method 3: Use LLM Gateway with fallback models (no session_name required)
+# If session_name is not provided, the client will use the LLM Gateway service
+# where you can configure Primary LLM, First Backup LLM, and Second Backup LLM
+# The system will automatically fallback if the primary model fails
+client = Client(
+    username="your_username",
+    api_key="your_api_key",
+    enable_chat_evaluation=True
+)
 ```
 
 ## 📋 Table of Contents
 
+- [LLM Gateway Service](#-llm-gateway-service)
 - [Chat Operations](#-chat-operations)
 - [Evaluation Features](#-evaluation-features)
 - [Session Management](#-session-management)
@@ -40,12 +51,44 @@ client = Client(session_name="my-ai-session")
 - [Model Information](#-model-information)
 - [Usage Statistics](#-usage-statistics)
 
+## 🌐 LLM Gateway Service
+
+The LLM Gateway service provides automatic failover capabilities when you don't specify a `session_name`. This service allows you to configure multiple models with automatic fallback behavior.
+
+### How It Works
+
+When you create a client without a `session_name`, the system uses the LLM Gateway which includes:
+
+- **Primary LLM**: Your main model that handles all requests initially
+- **First Backup LLM**: Automatically used if the primary model fails
+- **Second Backup LLM**: Used as the final fallback if both primary and first backup fail
+
+```python
+# Using LLM Gateway with automatic fallback
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+)
+
+# All chat operations will use the gateway with automatic fallback
+response = client.chat("Hello world")
+# If primary model fails → tries first backup
+# If first backup fails → tries second backup
+```
+
+### Benefits
+
+- **High Availability**: Automatic failover ensures your application keeps working
+- **No Code Changes**: Fallback is transparent to your application
+- **Centralized Configuration**: Manage model preferences in one place
+- **Cost Optimization**: Use cheaper backup models when primary is unavailable
+
 ## 💬 Chat Operations
 
 ### Basic Chat
 
 ```python
-# Simple chat
+# Simple chat (uses LLM Gateway if no session_name provided during client creation)
 response = client.chat("What is artificial intelligence?")
 print(response)
 
@@ -59,7 +102,7 @@ response = client.chat("What's 2+2?", chat_history=False)
 ### Chat with Different Sessions
 
 ```python
-# Use a specific session for this chat
+# Use a specific session for this chat (bypasses LLM Gateway)
 response = client.chat("Hello", session_name="custom-session")
 ```
 
@@ -319,6 +362,25 @@ result.print()
 ```
 
 ## ⚙️ Advanced Configuration
+
+### LLM Gateway vs Session-Based Usage
+
+```python
+# Option 1: Use LLM Gateway (automatic fallback, no session management needed)
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+)
+# Automatically uses Primary → First Backup → Second Backup LLMs
+
+# Option 2: Use specific session (direct model access, no fallback)
+client = Client(
+    session_name="my-gpt-session",
+    username="your_username", 
+    api_key="your_api_key"
+)
+# Uses only the model configured for "my-gpt-session"
+```
 
 ### Custom API URL
 
