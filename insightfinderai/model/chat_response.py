@@ -51,7 +51,7 @@ class ChatResponse:
     def __str__(self):
         """Format chat response for clean, user-friendly display."""
         result = "[Chat Response]\n"
-        if self.session_name is not None:
+        if self.model is not None and self.model_version is not None:
             result += f"Model         : {self.model or 'Unknown'}\n"
             result += f"Model Version : {self.model_version or 'Unknown'}\n"
         
