@@ -503,9 +503,25 @@ class Client:
             stream_model = None  # Extract model from streaming data
             
             for line in response.iter_lines(decode_unicode=True):    
+                # Handle event lines (like fallback notifications)
+                if line and line.startswith('event:'):
+                    continue
+                    
                 if line and line.startswith('data:'):
                     json_part = line[5:].strip()
-                    if json_part and json_part != '[START]':
+                    
+                    # Check for fallback notification in data
+                    if json_part.startswith('[FALLBACK]'):
+                        # Model fallback detected - reset response accumulation
+                        stitched_response = ""
+                        evaluation_buffer = ""
+                        in_evaluation_block = False
+                        # Keep trace_id and other metadata but reset content
+                        if stream:
+                            print(f"\n[Model fallback detected: {json_part}]\n", flush=True)
+                        continue
+                    
+                    if json_part and json_part not in ['[START]', '[END]']:
                         try:
                             chunk = json.loads(json_part)
                             results.append(chunk)
@@ -514,8 +530,8 @@ class Client:
                             if "id" in chunk:
                                 trace_id = chunk["id"]
                             
-                            # Extract model from streaming data
-                            if "model" in chunk and not stream_model:
+                            # Extract model from streaming data - allow updates for fallbacks
+                            if "model" in chunk:
                                 stream_model = chunk["model"]
 
                             # Extract prompt / response token usage
@@ -528,6 +544,15 @@ class Client:
                                 for choice in chunk["choices"]:
                                     delta = choice.get("delta", {})
                                     content = delta.get("content", "")
+                                    finish_reason = choice.get("finish_reason")
+                                    
+                                    # Skip content that indicates model issues
+                                    if content and (
+                                        "This model has reached the token limit" in content or
+                                        content == "null" or
+                                        finish_reason == "exceed-token-limit"
+                                    ):
+                                        continue
                                     
                                     # Check if we're starting an evaluation block
                                     if content and content.startswith("{") and "evaluations" in content:
