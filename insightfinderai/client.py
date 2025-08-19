@@ -494,6 +494,8 @@ class Client:
             # Process streaming response
             results = []
             stitched_response = ""
+            last_non_empty_response = ""  # Track latest non-empty response for fallback scenarios
+            last_non_empty_evaluations = None  # Track evaluations associated with last non-empty response
             evaluations = None
             trace_id = None
             evaluation_buffer = ""  # Buffer to accumulate evaluation JSON
@@ -512,13 +514,28 @@ class Client:
                     
                     # Check for fallback notification in data
                     if json_part.startswith('[FALLBACK]'):
-                        # Model fallback detected - reset response accumulation
+                        # Model fallback detected - preserve current response and evaluations if non-empty before reset
+                        if stitched_response.strip():
+                            last_non_empty_response = stitched_response
+                            last_non_empty_evaluations = evaluations
+                        
+                        # Reset response accumulation for new model
                         stitched_response = ""
+                        evaluations = None
                         evaluation_buffer = ""
                         in_evaluation_block = False
                         # Keep trace_id and other metadata but reset content
                         if stream:
                             print(f"\n[Model fallback detected: {json_part}]\n", flush=True)
+                        continue
+                    
+                    # Handle end of fallback sequence - preserve last response if current is empty
+                    if "[FALLBACK END]" in json_part:
+                        if stitched_response.strip():
+                            last_non_empty_response = stitched_response
+                            last_non_empty_evaluations = evaluations
+                        if stream:
+                            print(f"\n[Fallback sequence ended: {json_part}]\n", flush=True)
                         continue
                     
                     if json_part and json_part not in ['[START]', '[END]']:
@@ -587,10 +604,23 @@ class Client:
                                     else:
                                         # Regular response content
                                         stitched_response += content
+                                        # Update last non-empty response and evaluations as we build it up
+                                        if stitched_response.strip():
+                                            last_non_empty_response = stitched_response
+                                            last_non_empty_evaluations = evaluations
                                         if stream and content:
                                             print(content, end='', flush=True)
                         except:
                             pass
+            
+            # If the final response is empty but we have a non-empty fallback response, use it
+            final_response = stitched_response
+            final_evaluations = evaluations
+            if not final_response.strip() and last_non_empty_response.strip():
+                final_response = last_non_empty_response
+                final_evaluations = last_non_empty_evaluations
+                if stream:
+                    print(f"\n[Using last non-empty response from fallback model]\n", flush=True)
             
             # Get model info from dedicated API
             try:
@@ -611,9 +641,9 @@ class Client:
             
             # Create response object
             chat_response = ChatResponse(
-                response=stitched_response,
+                response=final_response,
                 prompt=prompt_for_display,
-                evaluations=evaluations if enable_evaluation else None,
+                evaluations=final_evaluations if enable_evaluation else None,
                 trace_id=trace_id,
                 model=model_type,
                 model_version=model_version,
@@ -630,7 +660,7 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Request failed: {str(e)}")
 
-    def batch_chat(self, prompts: List[str], stream: bool = False, enable_evaluation: bool = None , max_workers: int = 3, session_name: Optional[str] = None) -> BatchChatResult:
+    def batch_chat(self, prompts: List[str], stream: bool = False, enable_evaluation: Optional[bool] = None, max_workers: int = 3, session_name: Optional[str] = None) -> BatchChatResult:
         """
         Send multiple chat messages in parallel using multithreading with the regular chat API.
         
