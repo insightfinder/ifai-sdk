@@ -12,25 +12,71 @@ pip install insightfinderai
 
 ### Basic Setup
 
+**Choose Your Setup Method:**
+
+**OPTION A: LLM Gateway (Recommended for most users)**
+- Use when you need high availability and automatic failover
+- Best for production applications requiring high uptime
+- Ideal for getting started quickly without session management
+- Perfect for prototyping and development
+- Key: Do NOT provide session_name to activate gateway
+
+**OPTION B: Specific Session**
+- Use when you need direct control over a specific model
+- Best for research requiring consistent model behavior
+- Ideal for testing specific model capabilities
+- Perfect for custom or fine-tuned models
+- Key: Provide session_name to bypass gateway
+
 ```python
 from insightfinderai import Client
 
-# Method 1: Provide credentials directly
+# OPTION A: LLM Gateway (Recommended for most users)
+# A1: Direct credentials
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+    # No session_name = Uses LLM Gateway
+)
+
+# A2: Environment variables (recommended for production)
+# Set environment variables to avoid credentials in code:
+# export INSIGHTFINDER_USERNAME="your_username"
+# export INSIGHTFINDER_API_KEY="your_api_key"
+client = Client()  # No session_name = Uses LLM Gateway
+
+# OPTION B: Specific Session (Advanced users)
+# B1: Direct credentials
 client = Client(
     session_name="my-ai-session",
     username="your_username",
     api_key="your_api_key",
-    enable_chat_evaluation=True  # Show evaluation results (default: True)
+    enable_chat_evaluation=True  # Default: True
 )
 
-# Method 2: Use environment variables
+# B2: Environment variables (recommended for production)
+# Set environment variables to avoid credentials in code:
 # export INSIGHTFINDER_USERNAME="your_username"
 # export INSIGHTFINDER_API_KEY="your_api_key"
 client = Client(session_name="my-ai-session")
 ```
 
+### 🤔 Which Method Should You Use?
+
+| Use Case | Recommended Method | Why? |
+|----------|-------------------|------|
+| **Getting Started** | Option A (LLM Gateway) | Automatic failover, no setup |
+| **Production Apps** | Option A (LLM Gateway) | High availability, cost optimization |
+| **Prototyping** | Option A (LLM Gateway) | Quick start, reliable |
+| **Model Testing** | Option B (Specific Session) | Control exact model behavior |
+| **Research** | Option B (Specific Session) | Consistent model responses |
+| **Custom Models** | Option B (Specific Session) | Use your fine-tuned models |
+
+**💡 Pro Tip**: Start with Option A (LLM Gateway). Only use Option B if you need specific model control.
+
 ## 📋 Table of Contents
 
+- [LLM Gateway Service](#-llm-gateway-service)
 - [Chat Operations](#-chat-operations)
 - [Evaluation Features](#-evaluation-features)
 - [Session Management](#-session-management)
@@ -40,12 +86,65 @@ client = Client(session_name="my-ai-session")
 - [Model Information](#-model-information)
 - [Usage Statistics](#-usage-statistics)
 
+## 🌐 LLM Gateway Service
+
+The LLM Gateway service provides automatic failover capabilities when you **don't specify a `session_name`**. This service allows you to configure multiple models with automatic fallback behavior.
+
+### 🔑 How to Activate LLM Gateway
+
+**Simple rule: Don't provide `session_name` when creating your client**
+
+```python
+# ✅ Uses LLM Gateway (recommended)
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+    # No session_name parameter = Gateway mode
+)
+
+# ❌ Does NOT use LLM Gateway
+client = Client(
+    session_name="my-session",  # This bypasses the gateway
+    username="your_username",
+    api_key="your_api_key"
+)
+```
+
+### How It Works
+
+When you create a client without a `session_name`, the system uses the LLM Gateway which includes:
+
+- **Primary LLM**: Your main model that handles all requests initially
+- **First Backup LLM**: Automatically used if the primary model fails
+- **Second Backup LLM**: Used as the final fallback if both primary and first backup fail
+
+```python
+# Using LLM Gateway with automatic fallback
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+)
+
+# All chat operations will use the gateway with automatic fallback
+response = client.chat("Hello world")
+# If primary model fails → tries first backup
+# If first backup fails → tries second backup
+```
+
+### Benefits
+
+- **High Availability**: Automatic failover ensures your application keeps working
+- **No Code Changes**: Fallback is transparent to your application
+- **Centralized Configuration**: Manage model preferences in one place
+- **Cost Optimization**: Use cheaper backup models when primary is unavailable
+- **Zero Setup**: No need to create or manage sessions
+
 ## 💬 Chat Operations
 
 ### Basic Chat
 
 ```python
-# Simple chat
+# Simple chat (uses LLM Gateway if no session_name provided during client creation)
 response = client.chat("What is artificial intelligence?")
 print(response)
 
@@ -59,7 +158,7 @@ response = client.chat("What's 2+2?", chat_history=False)
 ### Chat with Different Sessions
 
 ```python
-# Use a specific session for this chat
+# Use a specific session for this chat (bypasses LLM Gateway)
 response = client.chat("Hello", session_name="custom-session")
 ```
 
@@ -319,6 +418,41 @@ result.print()
 ```
 
 ## ⚙️ Advanced Configuration
+
+### LLM Gateway vs Session-Based Usage
+
+**The key difference is whether you provide `session_name` or not:**
+
+```python
+# 🌐 OPTION A: LLM Gateway (High Availability Mode)
+# ✅ Automatic failover between Primary → Backup1 → Backup2
+# ✅ 99.9% uptime
+# ✅ Cost optimization
+# ✅ Zero session management
+client = Client(
+    username="your_username",
+    api_key="your_api_key"
+    # KEY: No session_name = Gateway mode
+)
+
+# 🎯 OPTION B: Direct Session (Specific Model Mode)  
+# ✅ Direct control over exact model
+# ✅ Consistent model behavior
+# ❌ No automatic failover
+# ❌ Manual session management required
+client = Client(
+    session_name="my-gpt-session",  # KEY: session_name = Direct mode
+    username="your_username", 
+    api_key="your_api_key"
+)
+```
+
+**Decision Guide:**
+- **Need reliability?** → Use Option A (no session_name)
+- **Need specific model?** → Use Option B (with session_name)
+- **Just getting started?** → Use Option A (no session_name)
+- **Building production app?** → Use Option A (no session_name)
+- **Doing model research?** → Use Option B (with session_name)
 
 ### Custom API URL
 

@@ -494,17 +494,51 @@ class Client:
             # Process streaming response
             results = []
             stitched_response = ""
+            last_non_empty_response = ""  # Track latest non-empty response for fallback scenarios
+            last_non_empty_evaluations = None  # Track evaluations associated with last non-empty response
             evaluations = None
             trace_id = None
             evaluation_buffer = ""  # Buffer to accumulate evaluation JSON
             in_evaluation_block = False
             prompt_token = 0
             response_token = 0
+            stream_model = None  # Extract model from streaming data
             
             for line in response.iter_lines(decode_unicode=True):    
+                # Handle event lines (like fallback notifications)
+                if line and line.startswith('event:'):
+                    continue
+                    
                 if line and line.startswith('data:'):
                     json_part = line[5:].strip()
-                    if json_part and json_part != '[START]':
+                    
+                    # Check for fallback notification in data
+                    if json_part.startswith('[FALLBACK]'):
+                        # Model fallback detected - preserve current response and evaluations if non-empty before reset
+                        if stitched_response.strip():
+                            last_non_empty_response = stitched_response
+                            last_non_empty_evaluations = evaluations
+                        
+                        # Reset response accumulation for new model
+                        stitched_response = ""
+                        evaluations = None
+                        evaluation_buffer = ""
+                        in_evaluation_block = False
+                        # Keep trace_id and other metadata but reset content
+                        if stream:
+                            print(f"\n[Model fallback detected: {json_part}]\n", flush=True)
+                        continue
+                    
+                    # Handle end of fallback sequence - preserve last response if current is empty
+                    if "[FALLBACK END]" in json_part:
+                        if stitched_response.strip():
+                            last_non_empty_response = stitched_response
+                            last_non_empty_evaluations = evaluations
+                        if stream:
+                            print(f"\n[Fallback sequence ended: {json_part}]\n", flush=True)
+                        continue
+                    
+                    if json_part and json_part not in ['[START]', '[END]']:
                         try:
                             chunk = json.loads(json_part)
                             results.append(chunk)
@@ -512,6 +546,10 @@ class Client:
                             # Extract metadata
                             if "id" in chunk:
                                 trace_id = chunk["id"]
+                            
+                            # Extract model from streaming data - allow updates for fallbacks
+                            if "model" in chunk:
+                                stream_model = chunk["model"]
 
                             # Extract prompt / response token usage
                             if 'inputOutputTokenPair' in chunk:
@@ -523,6 +561,15 @@ class Client:
                                 for choice in chunk["choices"]:
                                     delta = choice.get("delta", {})
                                     content = delta.get("content", "")
+                                    finish_reason = choice.get("finish_reason")
+                                    
+                                    # Skip content that indicates model issues
+                                    if content and (
+                                        "This model has reached the token limit" in content or
+                                        content == "null" or
+                                        finish_reason == "exceed-token-limit"
+                                    ):
+                                        continue
                                     
                                     # Check if we're starting an evaluation block
                                     if content and content.startswith("{") and "evaluations" in content:
@@ -557,10 +604,23 @@ class Client:
                                     else:
                                         # Regular response content
                                         stitched_response += content
+                                        # Update last non-empty response and evaluations as we build it up
+                                        if stitched_response.strip():
+                                            last_non_empty_response = stitched_response
+                                            last_non_empty_evaluations = evaluations
                                         if stream and content:
                                             print(content, end='', flush=True)
                         except:
                             pass
+            
+            # If the final response is empty but we have a non-empty fallback response, use it
+            final_response = stitched_response
+            final_evaluations = evaluations
+            if not final_response.strip() and last_non_empty_response.strip():
+                final_response = last_non_empty_response
+                final_evaluations = last_non_empty_evaluations
+                if stream:
+                    print(f"\n[Using last non-empty response from fallback model]\n", flush=True)
             
             # Get model info from dedicated API
             try:
@@ -568,15 +628,22 @@ class Client:
                 model_type = model_info.get('modelType', 'Unknown')
                 model_version = model_info.get('modelVersion', 'Unknown')
             except Exception as e:
-                logger.warning(f"Failed to get model info: {e}")
+                # logger.warning(f"Failed to get model info: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
+                
+                # Use streaming data as fallback if available
+                if stream_model:
+                    model_type = stream_model
+                    model_version = stream_model
+                    if not session_name:
+                        model_version = "LLM Gateway"
             
             # Create response object
             chat_response = ChatResponse(
-                response=stitched_response,
+                response=final_response,
                 prompt=prompt_for_display,
-                evaluations=evaluations if enable_evaluation else None,
+                evaluations=final_evaluations if enable_evaluation else None,
                 trace_id=trace_id,
                 model=model_type,
                 model_version=model_version,
@@ -593,7 +660,7 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Request failed: {str(e)}")
 
-    def batch_chat(self, prompts: List[str], stream: bool = False, enable_evaluation: bool = None , max_workers: int = 3, session_name: Optional[str] = None) -> BatchChatResult:
+    def batch_chat(self, prompts: List[str], stream: bool = False, enable_evaluation: Optional[bool] = None, max_workers: int = 3, session_name: Optional[str] = None) -> BatchChatResult:
         """
         Send multiple chat messages in parallel using multithreading with the regular chat API.
         
@@ -707,7 +774,7 @@ class Client:
                 model_type = model_info.get('modelType', 'Unknown')
                 model_version = model_info.get('modelVersion', 'Unknown')
             except Exception as e:
-                logger.warning(f"Failed to get model info for evaluation: {e}")
+                # logger.warning(f"Failed to get model info for evaluation: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
             
@@ -820,7 +887,7 @@ class Client:
                 model_type = model_info.get('modelType', 'Unknown')
                 model_version = model_info.get('modelVersion', 'Unknown')
             except Exception as e:
-                logger.warning(f"Failed to get model info for safety evaluation: {e}")
+                # logger.warning(f"Failed to get model info for safety evaluation: {e}")
                 model_type = 'Unknown'
                 model_version = 'Unknown'
             
@@ -1121,7 +1188,7 @@ class Client:
             model_type = model_info.get('modelType', 'Unknown')
             model_version = model_info.get('modelVersion', 'Unknown')
         except Exception as e:
-            logger.warning(f"Failed to get model info for apply_system_prompt: {e}")
+            # logger.warning(f"Failed to get model info for apply_system_prompt: {e}")
             model_type = 'Unknown'
             model_version = 'Unknown'
         
