@@ -21,7 +21,18 @@ from .config import (
     ORG_TOKEN_USAGE_ENDPOINT,
     CREATE_SESSION_ENDPOINT,
     DELETE_SESSION_ENDPOINT,
-    SUPPORTED_MODELS_ENDPOINT
+    SUPPORTED_MODELS_ENDPOINT,
+    REAL_MODEL_LIST_SEARCH_ENDPOINT,
+    REAL_MODEL_LIST_SEARCH_WITH_DATASET_ENDPOINT,
+    DATASET_LIST_ENDPOINT,
+    DATASET_SEARCH_ENDPOINT,
+    PROMPT_TEMPLATE_VERSIONS_ENDPOINT,
+    PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT,
+    TEMPLATE_COMPARE_RUN_ENDPOINT,
+    TEMPLATE_COMPARE_EVALUATION_ENDPOINT,
+    TEMPLATE_COMPARE_WINNER_ENDPOINT,
+    EVENUP_MODELS_ENDPOINT,
+    EVENUP_COMPARE_ENDPOINT,
 )
 from .model import (
     EvaluationResult,
@@ -133,7 +144,28 @@ class Client:
         self.create_session_url = self.base_url + CREATE_SESSION_ENDPOINT
         self.delete_session_url = self.base_url + DELETE_SESSION_ENDPOINT
         self.supported_models_url = self.base_url + SUPPORTED_MODELS_ENDPOINT
-        
+
+        # Real model URLs
+        self.real_model_list_search_url = self.base_url + REAL_MODEL_LIST_SEARCH_ENDPOINT
+        self.real_model_list_search_with_dataset_url = self.base_url + REAL_MODEL_LIST_SEARCH_WITH_DATASET_ENDPOINT
+
+        # Dataset URLs
+        self.dataset_list_url = self.base_url + DATASET_LIST_ENDPOINT
+        self.dataset_search_url = self.base_url + DATASET_SEARCH_ENDPOINT
+
+        # Prompt template URLs
+        self.prompt_template_versions_url = self.base_url + PROMPT_TEMPLATE_VERSIONS_ENDPOINT
+        self.prompt_template_latest_prompts_url = self.base_url + PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT
+
+        # Template compare URLs
+        self.template_compare_run_url = self.base_url + TEMPLATE_COMPARE_RUN_ENDPOINT
+        self.template_compare_evaluation_url = self.base_url + TEMPLATE_COMPARE_EVALUATION_ENDPOINT
+        self.template_compare_winner_url = self.base_url + TEMPLATE_COMPARE_WINNER_ENDPOINT
+
+        # Evenup URLs
+        self.evenup_models_url = self.base_url + EVENUP_MODELS_ENDPOINT
+        self.evenup_compare_url = self.base_url + EVENUP_COMPARE_ENDPOINT
+
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
         
@@ -1463,3 +1495,400 @@ class Client:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error deleting session: {str(e)}")
             return False
+
+    # ---------------------------------------------------------------------------
+    # Real model search
+    # ---------------------------------------------------------------------------
+
+    def search_models(self, page_number: int = 0, page_size: int = 10,
+                      model_name: Optional[str] = None, archived: bool = False,
+                      sort_by: str = "lastUpdateTime", sort_order: str = "descend") -> dict:
+        """
+        Search LLM Lab models with pagination and filtering.
+
+        Args:
+            page_number (int): Zero-based page index (default: 0)
+            page_size (int): Number of results per page (default: 10)
+            model_name (str, optional): Filter by model name substring
+            archived (bool): Include archived models (default: False)
+            sort_by (str): Field to sort by (default: "lastUpdateTime")
+            sort_order (str): "ascend" or "descend" (default: "descend")
+
+        Returns:
+            dict: Paginated result with model list
+        """
+        params = {
+            "pageNumber": page_number,
+            "pageSize": page_size,
+            "archived": str(archived).lower(),
+            "sortBy": sort_by,
+            "sortOrder": sort_order,
+        }
+        if model_name:
+            params["modelName"] = model_name
+        try:
+            response = requests.get(self.real_model_list_search_url, headers=self._get_headers(), params=params)
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model list search API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Model list search request failed: {str(e)}")
+
+    def search_models_with_dataset(self, page_number: int = 0, page_size: int = 10,
+                                   model_name: Optional[str] = None, archived: bool = False,
+                                   sort_by: str = "lastUpdateTime", sort_order: str = "descend",
+                                   template_id: Optional[str] = None,
+                                   template_versions: Optional[List[str]] = None) -> dict:
+        """
+        Search LLM Lab models filtered by prompt template/dataset with pagination.
+
+        Args:
+            page_number (int): Zero-based page index (default: 0)
+            page_size (int): Number of results per page (default: 10)
+            model_name (str, optional): Filter by model name substring
+            archived (bool): Include archived models (default: False)
+            sort_by (str): Field to sort by (default: "lastUpdateTime")
+            sort_order (str): "ascend" or "descend" (default: "descend")
+            template_id (str, optional): Filter by prompt template ID
+            template_versions (List[str], optional): Filter by specific template versions
+
+        Returns:
+            dict: Paginated result with model list
+        """
+        params = {
+            "pageNumber": page_number,
+            "pageSize": page_size,
+            "archived": str(archived).lower(),
+            "sortBy": sort_by,
+            "sortOrder": sort_order,
+        }
+        if model_name:
+            params["modelName"] = model_name
+        if template_id:
+            params["templateId"] = template_id
+        if template_versions:
+            params["templateVersion"] = template_versions  # requests repeats the param for each item
+        try:
+            response = requests.get(self.real_model_list_search_with_dataset_url, headers=self._get_headers(), params=params)
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model list search with dataset API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Model list search with dataset request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Datasets
+    # ---------------------------------------------------------------------------
+
+    def list_datasets(self) -> list:
+        """
+        List all datasets for the current user.
+
+        Returns:
+            list: List of dataset metadata objects
+        """
+        try:
+            response = requests.get(self.dataset_list_url, headers=self._get_headers())
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Dataset list API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Dataset list request failed: {str(e)}")
+
+    def search_datasets(self, dataset_name: Optional[str] = None, sort_by: Optional[str] = None,
+                        sort_order: Optional[str] = None, page_number: int = 0,
+                        page_size: int = 10) -> dict:
+        """
+        Search datasets with optional filtering and pagination.
+
+        Args:
+            dataset_name (str, optional): Filter by dataset name substring
+            sort_by (str, optional): Field to sort by
+            sort_order (str, optional): "ascend" or "descend"
+            page_number (int): Zero-based page index (default: 0)
+            page_size (int): Number of results per page (default: 10)
+
+        Returns:
+            dict: Paginated result with dataset list
+        """
+        params = {"pageNumber": page_number, "pageSize": page_size}
+        if dataset_name:
+            params["datasetName"] = dataset_name
+        if sort_by:
+            params["sortBy"] = sort_by
+        if sort_order:
+            params["sortOrder"] = sort_order
+        try:
+            response = requests.get(self.dataset_search_url, headers=self._get_headers(), params=params)
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Dataset search API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Dataset search request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Prompt templates
+    # ---------------------------------------------------------------------------
+
+    def get_prompt_template_versions(self, template_id: str) -> list:
+        """
+        Get all versions and their contents for a prompt template.
+
+        Args:
+            template_id (str): The prompt template ID
+
+        Returns:
+            list: List of version objects with content
+        """
+        if not template_id:
+            raise ValueError("template_id cannot be empty")
+        try:
+            response = requests.get(
+                self.prompt_template_versions_url,
+                headers=self._get_headers(),
+                params={"templateId": template_id}
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Prompt template versions API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Prompt template versions request failed: {str(e)}")
+
+    def get_latest_prompt_templates(self, template_name: Optional[str] = None,
+                                    page_size: int = 10, page_number: int = 0,
+                                    sort_by: Optional[str] = None,
+                                    sort_order: Optional[str] = None,
+                                    type: Optional[str] = None) -> dict:
+        """
+        Get the latest version of prompt templates with pagination.
+
+        Args:
+            template_name (str, optional): Filter by template name substring
+            page_size (int): Number of results per page (default: 10)
+            page_number (int): Zero-based page index (default: 0)
+            sort_by (str, optional): Field to sort by
+            sort_order (str, optional): "ascend" or "descend"
+            type (str, optional): Filter by template type (comma-separated values accepted)
+
+        Returns:
+            dict: Paginated result with latest-version prompt templates
+        """
+        params = {"pageSize": page_size, "pageNumber": page_number}
+        if template_name:
+            params["templateName"] = template_name
+        if sort_by:
+            params["sortBy"] = sort_by
+        if sort_order:
+            params["sortOrder"] = sort_order
+        if type:
+            params["type"] = type
+        try:
+            response = requests.get(
+                self.prompt_template_latest_prompts_url,
+                headers=self._get_headers(),
+                params=params
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Latest prompt templates API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Latest prompt templates request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Template compare
+    # ---------------------------------------------------------------------------
+
+    def run_template_compare(self, template_id: str, template_version: str,
+                             prompt: str, model_type: str, model_version: str,
+                             template_username: Optional[str] = None,
+                             user_created_model_name: Optional[str] = None,
+                             dataset_id: Optional[str] = None,
+                             dataset_username: Optional[str] = None,
+                             model_username: Optional[str] = None,
+                             aws_region: Optional[str] = None,
+                             aws_bedrock_model_id: Optional[str] = None,
+                             stream: bool = False) -> str:
+        """
+        Run a template comparison for a single model. Call once per model being compared.
+        Returns the full accumulated response text from the SSE stream.
+
+        Args:
+            template_id (str): Prompt template ID to compare
+            template_version (str): Template version to use
+            prompt (str): The prompt to send
+            model_type (str): Model type (e.g. "OpenAI")
+            model_version (str): Model version (e.g. "gpt-4o")
+            template_username (str, optional): Owner of the template (defaults to current user)
+            user_created_model_name (str, optional): User-created model name if using LLM Labs model
+            dataset_id (str, optional): Dataset ID to associate with this comparison
+            dataset_username (str, optional): Owner of the dataset
+            model_username (str, optional): Owner of the model
+            aws_region (str, optional): AWS region for Bedrock models
+            aws_bedrock_model_id (str, optional): Bedrock model ID
+            stream (bool): Print chunks to stdout as they arrive (default: False)
+
+        Returns:
+            str: Full response text
+        """
+        data = {
+            "templateUsername": template_username or self.username,
+            "templateId": template_id,
+            "templateVersion": template_version,
+            "prompt": prompt,
+            "modelType": model_type,
+            "modelVersion": model_version,
+        }
+        if user_created_model_name:
+            data["userCreatedModelName"] = user_created_model_name
+        if dataset_id:
+            data["dataSetId"] = dataset_id
+        if dataset_username:
+            data["dataSetUsername"] = dataset_username
+        if model_username:
+            data["modelUsername"] = model_username
+        if aws_region:
+            data["awsRegion"] = aws_region
+        if aws_bedrock_model_id:
+            data["awsBedrockModelId"] = aws_bedrock_model_id
+
+        try:
+            response = requests.post(
+                self.template_compare_run_url,
+                headers=self._get_headers(),
+                json=data,
+                stream=True
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Template compare API error {response.status_code}: {response.text}")
+
+            result = ""
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or line.startswith("event:"):
+                    continue
+                if line.startswith("data:"):
+                    content = line[5:].strip()
+                    if content in ("[START]", "[END]"):
+                        continue
+                    try:
+                        chunk = json.loads(content)
+                        for choice in chunk.get("choices", []):
+                            delta_content = choice.get("delta", {}).get("content", "")
+                            if delta_content:
+                                result += delta_content
+                                if stream:
+                                    print(delta_content, end="", flush=True)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+            return result
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Template compare request failed: {str(e)}")
+
+    def get_template_compare_evaluation(self, user_name: str, template_id: str,
+                                        template_version: str) -> list:
+        """
+        Get evaluation results for a template comparison run.
+
+        Args:
+            user_name (str): The user who owns the template compare data
+            template_id (str): Prompt template ID
+            template_version (str): Template version
+
+        Returns:
+            list: List of model evaluation result objects
+        """
+        data = {
+            "userName": user_name,
+            "templateId": template_id,
+            "templateVersion": template_version
+        }
+        try:
+            response = requests.post(
+                self.template_compare_evaluation_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Template compare evaluation API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Template compare evaluation request failed: {str(e)}")
+
+    def get_template_compare_winner(self, template_id: str) -> dict:
+        """
+        Get the winning model for a template comparison.
+
+        Args:
+            template_id (str): Prompt template ID
+
+        Returns:
+            dict: Template compare winner detail
+        """
+        if not template_id:
+            raise ValueError("template_id cannot be empty")
+        try:
+            response = requests.get(
+                self.template_compare_winner_url,
+                headers=self._get_headers(),
+                params={"templateId": template_id}
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Template compare winner API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Template compare winner request failed: {str(e)}")
+
+    def get_evenup_models(self) -> list:
+        """
+        Get the list of available Evenup models.
+
+        Returns:
+            list: List of Evenup model ID strings
+        """
+        try:
+            response = requests.get(
+                self.evenup_models_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Evenup models API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Evenup models request failed: {str(e)}")
+
+    def send_evenup_compare(self, template_id: str, template_version: str,
+                            dataset_id: str, model_id: str,
+                            template_owner: str = None) -> str:
+        """
+        Send a prompt template and dataset to Evenup for async processing.
+        Evenup will call back our webhook with the response and a task_id.
+
+        Args:
+            template_id (str): Prompt template ID
+            template_version (str): Template version
+            dataset_id (str): Dataset ID
+            model_id (str): Evenup model ID to use
+            template_owner (str): Owner of the template (defaults to authenticated user)
+
+        Returns:
+            str: task_id returned by Evenup for tracking the async result
+        """
+        data = {
+            "templateId": template_id,
+            "templateVersion": template_version,
+            "datasetId": dataset_id,
+            "modelId": model_id,
+        }
+        if template_owner is not None:
+            data["templateOwner"] = template_owner
+        try:
+            response = requests.post(
+                self.evenup_compare_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Evenup compare API error {response.status_code}: {response.text}")
+            return response.text
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Evenup compare request failed: {str(e)}")

@@ -22,3 +22,24 @@ SAFETY_EVALUATION_ENDPOINT = "api/external/v1/evaluation/safety"
 
 # Other endpoints
 ORG_TOKEN_USAGE_ENDPOINT = "api/external/v1/llm-labs/current-token-map"
+
+# Real model endpoints
+REAL_MODEL_LIST_SEARCH_ENDPOINT = "api/external/v1/real-model/model-list-search"
+REAL_MODEL_LIST_SEARCH_WITH_DATASET_ENDPOINT = "api/external/v1/real-model/model-list-search-withdataset"
+
+# Dataset endpoints
+DATASET_LIST_ENDPOINT = "api/external/v1/llm-lab/datasets"
+DATASET_SEARCH_ENDPOINT = "api/external/v1/llm-lab/datasets/search"
+
+# Prompt template endpoints
+PROMPT_TEMPLATE_VERSIONS_ENDPOINT = "api/external/v2/prompt-templates/versions"
+PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT = "api/external/v2/prompt-templates/latest-version-prompts"
+
+# Template compare endpoints
+TEMPLATE_COMPARE_RUN_ENDPOINT = "api/external/v1/llm-lab/template-compare/compare"
+TEMPLATE_COMPARE_EVALUATION_ENDPOINT = "api/external/v1/llm-lab/template-compare/evaluation-detail"
+TEMPLATE_COMPARE_WINNER_ENDPOINT = "api/external/v1/llm-lab/template-compare/winner"
+
+# Evenup endpoints
+EVENUP_MODELS_ENDPOINT = "api/external/v1/evenup/models"
+EVENUP_COMPARE_ENDPOINT = "api/external/v1/evenup/compare"
