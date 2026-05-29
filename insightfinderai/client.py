@@ -31,8 +31,11 @@ from .config import (
     TEMPLATE_COMPARE_RUN_ENDPOINT,
     TEMPLATE_COMPARE_EVALUATION_ENDPOINT,
     TEMPLATE_COMPARE_WINNER_ENDPOINT,
-    EVENUP_MODELS_ENDPOINT,
-    EVENUP_COMPARE_ENDPOINT,
+    CUSTOMER_INFRA_OPTIONS_ENDPOINT,
+    CUSTOMER_INFRA_SETTINGS_ENDPOINT,
+    CUSTOMER_INFRA_SWITCH_ENDPOINT,
+    CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT,
+    CUSTOMER_INFRA_COMPARE_ENDPOINT,
 )
 from .model import (
     EvaluationResult,
@@ -162,9 +165,12 @@ class Client:
         self.template_compare_evaluation_url = self.base_url + TEMPLATE_COMPARE_EVALUATION_ENDPOINT
         self.template_compare_winner_url = self.base_url + TEMPLATE_COMPARE_WINNER_ENDPOINT
 
-        # Evenup URLs
-        self.evenup_models_url = self.base_url + EVENUP_MODELS_ENDPOINT
-        self.evenup_compare_url = self.base_url + EVENUP_COMPARE_ENDPOINT
+        # Customer infrastructure URLs
+        self.customer_infra_options_url = self.base_url + CUSTOMER_INFRA_OPTIONS_ENDPOINT
+        self.customer_infra_settings_url = self.base_url + CUSTOMER_INFRA_SETTINGS_ENDPOINT
+        self.customer_infra_switch_url = self.base_url + CUSTOMER_INFRA_SWITCH_ENDPOINT
+        self.customer_infra_verify_token_url = self.base_url + CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT
+        self.customer_infra_compare_url = self.base_url + CUSTOMER_INFRA_COMPARE_ENDPOINT
 
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
@@ -1838,57 +1844,154 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Template compare winner request failed: {str(e)}")
 
-    def get_evenup_models(self) -> list:
+    # ---------------------------------------------------------------------------
+    # Customer infrastructure
+    # ---------------------------------------------------------------------------
+
+    def get_customer_infra_options(self) -> list:
         """
-        Get the list of available Evenup models.
+        Get the list of available infrastructure options.
 
         Returns:
-            list: List of Evenup model ID strings
+            list: e.g. ["InsightFinder Infrastructure", "Customer Infrastructure"]
         """
         try:
             response = requests.get(
-                self.evenup_models_url,
+                self.customer_infra_options_url,
                 headers=self._get_headers()
             )
             if not (200 <= response.status_code < 300):
-                raise ValueError(f"Evenup models API error {response.status_code}: {response.text}")
+                raise ValueError(f"Customer infra options API error {response.status_code}: {response.text}")
             return response.json()
         except requests.exceptions.RequestException as e:
-            raise ValueError(f"Evenup models request failed: {str(e)}")
+            raise ValueError(f"Customer infra options request failed: {str(e)}")
 
-    def send_evenup_compare(self, template_id: str, template_version: str,
-                            dataset_id: str, model_id: str,
-                            template_owner: str = None) -> str:
+    def get_customer_infra_settings(self) -> dict:
         """
-        Send a prompt template and dataset to Evenup for async processing.
-        Evenup will call back our webhook with the response and a task_id.
-
-        Args:
-            template_id (str): Prompt template ID
-            template_version (str): Template version
-            dataset_id (str): Dataset ID
-            model_id (str): Evenup model ID to use
-            template_owner (str): Owner of the template (defaults to authenticated user)
+        Get the saved customer infrastructure settings for the current user,
+        including the read-only webhookUrl.
 
         Returns:
-            str: task_id returned by Evenup for tracking the async result
+            dict: Settings including apiBaseUrl, apiToken, modelList, hmacSecret,
+                  webhookUrl, and currentInfra
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_settings_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Customer infra settings API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra settings request failed: {str(e)}")
+
+    def save_customer_infra_settings(self, api_base_url: str, api_token: str,
+                                     model_list: List[str], hmac_secret: str) -> bool:
+        """
+        Save customer infrastructure settings and auto-create LLM Lab models for each alias.
+
+        Args:
+            api_base_url (str): Base URL of the customer API
+            api_token (str): Bearer token for authenticating with the customer API
+            model_list (List[str]): List of model alias strings (e.g. ["BEST_IN_CLASS", "GEMINI_2_5"])
+            hmac_secret (str): HMAC secret for verifying webhook callbacks
+
+        Returns:
+            bool: True if saved successfully
         """
         data = {
-            "templateId": template_id,
-            "templateVersion": template_version,
-            "datasetId": dataset_id,
-            "modelId": model_id,
+            "apiBaseUrl": api_base_url,
+            "apiToken": api_token,
+            "modelList": model_list,
+            "hmacSecret": hmac_secret,
         }
-        if template_owner is not None:
-            data["templateOwner"] = template_owner
         try:
             response = requests.post(
-                self.evenup_compare_url,
+                self.customer_infra_settings_url,
                 headers=self._get_headers(),
                 json=data
             )
             if not (200 <= response.status_code < 300):
-                raise ValueError(f"Evenup compare API error {response.status_code}: {response.text}")
+                raise ValueError(f"Save customer infra settings API error {response.status_code}: {response.text}")
+            return True
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Save customer infra settings request failed: {str(e)}")
+
+    def switch_customer_infra(self, infra_type: str) -> bool:
+        """
+        Switch the active infrastructure for the current user.
+
+        Args:
+            infra_type (str): "InsightFinder Infrastructure" or "Customer Infrastructure"
+
+        Returns:
+            bool: True if switched successfully
+        """
+        data = {"infraType": infra_type}
+        try:
+            response = requests.post(
+                self.customer_infra_switch_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Switch infra API error {response.status_code}: {response.text}")
+            return True
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Switch infra request failed: {str(e)}")
+
+    def verify_customer_infra_token(self) -> bool:
+        """
+        Verify that the stored customer API token is valid by calling the health endpoint.
+
+        Returns:
+            bool: True if the token is valid and the customer API is reachable
+        """
+        try:
+            response = requests.post(
+                self.customer_infra_verify_token_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Verify token API error {response.status_code}: {response.text}")
+            result = response.json()
+            return result.get("valid", False)
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Verify token request failed: {str(e)}")
+
+    def send_customer_infra_compare(self, model: str, matter_id: str, plaintiff_id: str,
+                                    playbook_id: str, prompt: str = None) -> str:
+        """
+        Send a run request to the customer API for async processing.
+        The customer API will call back our webhook with results when done.
+
+        Args:
+            model (str): Customer model alias (e.g. "BEST_IN_CLASS", "GEMINI_2_5")
+            matter_id (str): Matter ID (dataset) in the customer system
+            plaintiff_id (str): Plaintiff ID (sub-entry) in the customer system
+            playbook_id (str): Playbook ID (prompt template) in the customer system
+            prompt (str, optional): Prompt text — used to generate promptId for tracking
+
+        Returns:
+            str: run_id returned by the customer API for tracking the async result
+        """
+        data = {
+            "model": model,
+            "matter_id": matter_id,
+            "plaintiff_id": plaintiff_id,
+            "playbook_id": playbook_id,
+        }
+        if prompt is not None:
+            data["prompt"] = prompt
+        try:
+            response = requests.post(
+                self.customer_infra_compare_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Customer infra compare API error {response.status_code}: {response.text}")
             return response.text
         except requests.exceptions.RequestException as e:
-            raise ValueError(f"Evenup compare request failed: {str(e)}")
+            raise ValueError(f"Customer infra compare request failed: {str(e)}")

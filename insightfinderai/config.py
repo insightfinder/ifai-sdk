@@ -40,6 +40,9 @@ TEMPLATE_COMPARE_RUN_ENDPOINT = "api/external/v1/llm-lab/template-compare/compar
 TEMPLATE_COMPARE_EVALUATION_ENDPOINT = "api/external/v1/llm-lab/template-compare/evaluation-detail"
 TEMPLATE_COMPARE_WINNER_ENDPOINT = "api/external/v1/llm-lab/template-compare/winner"
 
-# Evenup endpoints
-EVENUP_MODELS_ENDPOINT = "api/external/v1/evenup/models"
-EVENUP_COMPARE_ENDPOINT = "api/external/v1/evenup/compare"
+# Customer infrastructure endpoints
+CUSTOMER_INFRA_OPTIONS_ENDPOINT = "api/external/v1/customer-infra/options"
+CUSTOMER_INFRA_SETTINGS_ENDPOINT = "api/external/v1/customer-infra/settings"
+CUSTOMER_INFRA_SWITCH_ENDPOINT = "api/external/v1/customer-infra/switch"
+CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT = "api/external/v1/customer-infra/verify-token"
+CUSTOMER_INFRA_COMPARE_ENDPOINT = "api/external/v1/customer-infra/compare"
