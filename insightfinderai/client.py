@@ -28,6 +28,8 @@ from .config import (
     DATASET_SEARCH_ENDPOINT,
     PROMPT_TEMPLATE_VERSIONS_ENDPOINT,
     PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT,
+    PROMPT_TEMPLATE_FROM_LIST_ENDPOINT,
+    PROMPT_TEMPLATE_BY_VERSION_ENDPOINT,
     TEMPLATE_COMPARE_RUN_ENDPOINT,
     TEMPLATE_COMPARE_EVALUATION_ENDPOINT,
     TEMPLATE_COMPARE_WINNER_ENDPOINT,
@@ -36,6 +38,9 @@ from .config import (
     CUSTOMER_INFRA_SWITCH_ENDPOINT,
     CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT,
     CUSTOMER_INFRA_COMPARE_ENDPOINT,
+    CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT,
+    CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT,
+    CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT,
 )
 from .model import (
     EvaluationResult,
@@ -159,6 +164,8 @@ class Client:
         # Prompt template URLs
         self.prompt_template_versions_url = self.base_url + PROMPT_TEMPLATE_VERSIONS_ENDPOINT
         self.prompt_template_latest_prompts_url = self.base_url + PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT
+        self.prompt_template_from_list_url = self.base_url + PROMPT_TEMPLATE_FROM_LIST_ENDPOINT
+        self.prompt_template_by_version_url = self.base_url + PROMPT_TEMPLATE_BY_VERSION_ENDPOINT
 
         # Template compare URLs
         self.template_compare_run_url = self.base_url + TEMPLATE_COMPARE_RUN_ENDPOINT
@@ -171,6 +178,9 @@ class Client:
         self.customer_infra_switch_url = self.base_url + CUSTOMER_INFRA_SWITCH_ENDPOINT
         self.customer_infra_verify_token_url = self.base_url + CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT
         self.customer_infra_compare_url = self.base_url + CUSTOMER_INFRA_COMPARE_ENDPOINT
+        self.customer_infra_ingest_playbook_url = self.base_url + CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT
+        self.customer_infra_ingest_matter_url = self.base_url + CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT
+        self.customer_infra_matters_base_url = self.base_url + CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT
 
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
@@ -1960,6 +1970,34 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Verify token request failed: {str(e)}")
 
+    def _save_prompt_library(self, playbook_id: str, plaintiff_id: str) -> None:
+        try:
+            resp = requests.post(
+                self.customer_infra_ingest_playbook_url,
+                headers=self._get_headers(),
+                json={"playbookId": playbook_id, "plaintiffId": plaintiff_id}
+            )
+            if not (200 <= resp.status_code < 300):
+                logger.warning("Failed to ingest playbook %s@%s: %s", playbook_id, plaintiff_id, resp.text)
+            else:
+                logger.info("Ingested prompt library %s@%s", playbook_id, plaintiff_id)
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to ingest playbook %s@%s: %s", playbook_id, plaintiff_id, e)
+
+    def _save_datasets(self, matter_id: str) -> None:
+        try:
+            resp = requests.post(
+                self.customer_infra_ingest_matter_url,
+                headers=self._get_headers(),
+                json={"matterId": matter_id}
+            )
+            if not (200 <= resp.status_code < 300):
+                logger.warning("Failed to ingest matter %s: %s", matter_id, resp.text)
+            else:
+                logger.info("Ingested matter %s", matter_id)
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to ingest matter %s: %s", matter_id, e)
+
     def send_customer_infra_compare(self, model: str, matter_id: str, plaintiff_id: str,
                                     playbook_id: str, prompt: str = None) -> str:
         """
@@ -1976,6 +2014,11 @@ class Client:
         Returns:
             str: run_id returned by the customer API for tracking the async result
         """
+        if playbook_id and plaintiff_id:
+            self._save_prompt_library(playbook_id, plaintiff_id)
+        if matter_id:
+            self._save_datasets(matter_id)
+
         data = {
             "model": model,
             "matter_id": matter_id,

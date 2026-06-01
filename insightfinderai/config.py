@@ -34,6 +34,8 @@ DATASET_SEARCH_ENDPOINT = "api/external/v1/llm-lab/datasets/search"
 # Prompt template endpoints
 PROMPT_TEMPLATE_VERSIONS_ENDPOINT = "api/external/v2/prompt-templates/versions"
 PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT = "api/external/v2/prompt-templates/latest-version-prompts"
+PROMPT_TEMPLATE_FROM_LIST_ENDPOINT = "api/external/v2/prompt-templates/from-list"
+PROMPT_TEMPLATE_BY_VERSION_ENDPOINT = "api/external/v2/prompt-templates/template-version-id"
 
 # Template compare endpoints
 TEMPLATE_COMPARE_RUN_ENDPOINT = "api/external/v1/llm-lab/template-compare/compare"
@@ -46,3 +48,6 @@ CUSTOMER_INFRA_SETTINGS_ENDPOINT = "api/external/v1/customer-infra/settings"
 CUSTOMER_INFRA_SWITCH_ENDPOINT = "api/external/v1/customer-infra/switch"
 CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT = "api/external/v1/customer-infra/verify-token"
 CUSTOMER_INFRA_COMPARE_ENDPOINT = "api/external/v1/customer-infra/compare"
+CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT = "api/external/v1/customer-infra/ingest-playbook"
+CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT = "api/external/v1/customer-infra/ingest-matter"
+CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT = "api/external/v1/customer-infra/matters"
