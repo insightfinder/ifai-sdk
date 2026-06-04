@@ -238,6 +238,197 @@ class TestGetCustomerDatasets(unittest.TestCase):
         self.assertIn("403", str(ctx.exception))
 
 
+class TestGetCustomerInfraOptions(unittest.TestCase):
+
+    def setUp(self):
+        self.client = _make_client()
+
+    def test_returns_list_of_option_strings(self):
+        options = ["InsightFinder Infrastructure", "Customer Infrastructure"]
+        with patch("requests.get", return_value=_ok(options)) as mock_get:
+            result = self.client.get_customer_infra_options()
+
+        self.assertEqual(options, result)
+        mock_get.assert_called_once()
+
+    def test_api_error_raises_value_error(self):
+        with patch("requests.get", return_value=_err(500)):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.get_customer_infra_options()
+        self.assertIn("500", str(ctx.exception))
+
+    def test_network_error_raises_value_error(self):
+        import requests as req
+        with patch("requests.get", side_effect=req.exceptions.ConnectionError("refused")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.get_customer_infra_options()
+        self.assertIn("failed", str(ctx.exception).lower())
+
+
+class TestGetCustomerInfraSettings(unittest.TestCase):
+
+    def setUp(self):
+        self.client = _make_client()
+
+    def test_returns_settings_dict(self):
+        settings = {
+            "apiBaseUrl": "https://api.evenup.com",
+            "apiToken": "tok-abc",
+            "modelList": [MODEL],
+            "hmacSecret": "s3cr3t",
+            "webhookUrl": "https://ai.insightfinder.com/api/customer/webhook",
+            "currentInfra": "Customer Infrastructure",
+        }
+        with patch("requests.get", return_value=_ok(settings)) as mock_get:
+            result = self.client.get_customer_infra_settings()
+
+        self.assertEqual(settings, result)
+        mock_get.assert_called_once()
+
+    def test_api_error_raises_value_error(self):
+        with patch("requests.get", return_value=_err(403)):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.get_customer_infra_settings()
+        self.assertIn("403", str(ctx.exception))
+
+    def test_network_error_raises_value_error(self):
+        import requests as req
+        with patch("requests.get", side_effect=req.exceptions.Timeout("timed out")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.get_customer_infra_settings()
+        self.assertIn("failed", str(ctx.exception).lower())
+
+
+class TestSaveCustomerInfraSettings(unittest.TestCase):
+
+    def setUp(self):
+        self.client = _make_client()
+
+    def test_posts_all_four_fields(self):
+        with patch("requests.post", return_value=_ok()) as mock_post:
+            result = self.client.save_customer_infra_settings(
+                api_base_url="https://api.evenup.com",
+                api_token="tok-abc",
+                model_list=[MODEL, "BEST_IN_CLASS"],
+                hmac_secret="s3cr3t",
+            )
+
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        sent = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+        self.assertEqual("https://api.evenup.com", sent["apiBaseUrl"])
+        self.assertEqual("tok-abc", sent["apiToken"])
+        self.assertEqual([MODEL, "BEST_IN_CLASS"], sent["modelList"])
+        self.assertEqual("s3cr3t", sent["hmacSecret"])
+
+    def test_empty_model_list_is_sent(self):
+        with patch("requests.post", return_value=_ok()) as mock_post:
+            self.client.save_customer_infra_settings(
+                api_base_url="https://api.evenup.com",
+                api_token="tok-abc",
+                model_list=[],
+                hmac_secret="s3cr3t",
+            )
+
+        sent = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+        self.assertEqual([], sent["modelList"])
+
+    def test_api_error_raises_value_error(self):
+        with patch("requests.post", return_value=_err(400, "bad request")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.save_customer_infra_settings(
+                    api_base_url="https://api.evenup.com",
+                    api_token="tok",
+                    model_list=[],
+                    hmac_secret="s",
+                )
+        self.assertIn("400", str(ctx.exception))
+
+    def test_network_error_raises_value_error(self):
+        import requests as req
+        with patch("requests.post", side_effect=req.exceptions.ConnectionError("refused")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.save_customer_infra_settings(
+                    api_base_url="https://api.evenup.com",
+                    api_token="tok",
+                    model_list=[],
+                    hmac_secret="s",
+                )
+        self.assertIn("failed", str(ctx.exception).lower())
+
+
+class TestSwitchCustomerInfra(unittest.TestCase):
+
+    def setUp(self):
+        self.client = _make_client()
+
+    def test_posts_infra_type_and_returns_true(self):
+        with patch("requests.post", return_value=_ok()) as mock_post:
+            result = self.client.switch_customer_infra("Customer Infrastructure")
+
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        sent = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+        self.assertEqual("Customer Infrastructure", sent["infraType"])
+
+    def test_switch_to_insightfinder_infra(self):
+        with patch("requests.post", return_value=_ok()) as mock_post:
+            self.client.switch_customer_infra("InsightFinder Infrastructure")
+
+        sent = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+        self.assertEqual("InsightFinder Infrastructure", sent["infraType"])
+
+    def test_api_error_raises_value_error(self):
+        with patch("requests.post", return_value=_err(500)):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.switch_customer_infra("Customer Infrastructure")
+        self.assertIn("500", str(ctx.exception))
+
+    def test_network_error_raises_value_error(self):
+        import requests as req
+        with patch("requests.post", side_effect=req.exceptions.ConnectionError("refused")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.switch_customer_infra("Customer Infrastructure")
+        self.assertIn("failed", str(ctx.exception).lower())
+
+
+class TestVerifyCustomerInfraToken(unittest.TestCase):
+
+    def setUp(self):
+        self.client = _make_client()
+
+    def test_returns_true_when_server_says_valid(self):
+        with patch("requests.post", return_value=_ok({"valid": True})):
+            result = self.client.verify_customer_infra_token()
+        self.assertTrue(result)
+
+    def test_returns_false_when_server_says_invalid(self):
+        with patch("requests.post", return_value=_ok({"valid": False})):
+            result = self.client.verify_customer_infra_token()
+        self.assertFalse(result)
+
+    def test_api_error_raises_value_error(self):
+        with patch("requests.post", return_value=_err(403, "forbidden")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.verify_customer_infra_token()
+        self.assertIn("403", str(ctx.exception))
+
+    def test_network_error_raises_value_error(self):
+        import requests as req
+        with patch("requests.post", side_effect=req.exceptions.Timeout("timed out")):
+            with self.assertRaises(ValueError) as ctx:
+                self.client.verify_customer_infra_token()
+        self.assertIn("failed", str(ctx.exception).lower())
+
+    def test_posts_to_verify_token_endpoint(self):
+        """Uses POST (not GET), matching the SDK implementation."""
+        with patch("requests.post", return_value=_ok({"valid": True})) as mock_post:
+            self.client.verify_customer_infra_token()
+        mock_post.assert_called_once()
+        call_url = mock_post.call_args.args[0] if mock_post.call_args.args else mock_post.call_args[0][0]
+        self.assertIn("verify", call_url.lower())
+
+
 class TestEvenUpWebhookSimulation(unittest.TestCase):
     """
     Simulates EvenUp calling our webhook endpoint.
