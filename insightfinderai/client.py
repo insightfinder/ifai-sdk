@@ -41,6 +41,7 @@ from .config import (
     CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT,
     CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT,
     CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT,
+    CUSTOMER_INFRA_DATASETS_ENDPOINT,
 )
 from .model import (
     EvaluationResult,
@@ -181,6 +182,7 @@ class Client:
         self.customer_infra_ingest_playbook_url = self.base_url + CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT
         self.customer_infra_ingest_matter_url = self.base_url + CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT
         self.customer_infra_matters_base_url = self.base_url + CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT
+        self.customer_infra_datasets_url = self.base_url + CUSTOMER_INFRA_DATASETS_ENDPOINT
 
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
@@ -1970,6 +1972,24 @@ class Client:
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Verify token request failed: {str(e)}")
 
+    def get_customer_datasets(self, current_infra: str = "Customer Infrastructure") -> dict:
+        """
+        Returns customer infra datasets grouped by matter:
+        { "matterId": ["matterId@annotationFileId", ...], ... }
+        Only populated when current_infra is "Customer Infrastructure".
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_datasets_url,
+                headers=self._get_headers(),
+                params={"currentInfra": current_infra}
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Get customer datasets error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Get customer datasets request failed: {str(e)}")
+
     def _save_prompt_library(self, playbook_id: str, plaintiff_id: str) -> None:
         try:
             resp = requests.post(
@@ -2021,9 +2041,8 @@ class Client:
 
         data = {
             "model": model,
-            "matter_id": matter_id,
-            "plaintiff_id": plaintiff_id,
-            "playbook_id": playbook_id,
+            "datasetId": matter_id,
+            "templateId": playbook_id + "@" + plaintiff_id,
         }
         if prompt is not None:
             data["prompt"] = prompt
