@@ -39,6 +39,7 @@ PROMPT_TEMPLATE_BY_VERSION_ENDPOINT = "api/external/v2/prompt-templates/template
 
 # Template compare endpoints
 TEMPLATE_COMPARE_RUN_ENDPOINT = "api/external/v1/llm-lab/template-compare/compare"
+TEMPLATE_COMPARE_DETAIL_ENDPOINT = "api/external/v1/llm-lab/template-compare/detail"
 TEMPLATE_COMPARE_EVALUATION_ENDPOINT = "api/external/v1/llm-lab/template-compare/evaluation-detail"
 TEMPLATE_COMPARE_WINNER_ENDPOINT = "api/external/v1/llm-lab/template-compare/winner"
 

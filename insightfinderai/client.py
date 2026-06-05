@@ -31,6 +31,7 @@ from .config import (
     PROMPT_TEMPLATE_FROM_LIST_ENDPOINT,
     PROMPT_TEMPLATE_BY_VERSION_ENDPOINT,
     TEMPLATE_COMPARE_RUN_ENDPOINT,
+    TEMPLATE_COMPARE_DETAIL_ENDPOINT,
     TEMPLATE_COMPARE_EVALUATION_ENDPOINT,
     TEMPLATE_COMPARE_WINNER_ENDPOINT,
     CUSTOMER_INFRA_OPTIONS_ENDPOINT,
@@ -170,6 +171,7 @@ class Client:
 
         # Template compare URLs
         self.template_compare_run_url = self.base_url + TEMPLATE_COMPARE_RUN_ENDPOINT
+        self.template_compare_detail_url = self.base_url + TEMPLATE_COMPARE_DETAIL_ENDPOINT
         self.template_compare_evaluation_url = self.base_url + TEMPLATE_COMPARE_EVALUATION_ENDPOINT
         self.template_compare_winner_url = self.base_url + TEMPLATE_COMPARE_WINNER_ENDPOINT
 
@@ -2057,3 +2059,64 @@ class Client:
             return response.text
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Customer infra compare request failed: {str(e)}")
+
+    def get_customer_infra_compare_detail(self, playbook_id: str, plaintiff_id: str,
+                                          template_version: str = "v1.0") -> list:
+        """
+        Get raw per-prompt comparison rows for an EvenUp compare run.
+
+        Args:
+            playbook_id (str): EvenUp playbook ID used in the compare run
+            plaintiff_id (str): EvenUp plaintiff ID used in the compare run
+            template_version (str): Template version; defaults to "v1.0"
+
+        Returns:
+            list: List of per-prompt result objects (prompt, response, judge scores)
+        """
+        data = {
+            "templateId": playbook_id + "@" + plaintiff_id,
+            "templateVersion": template_version,
+        }
+        try:
+            response = requests.post(
+                self.template_compare_detail_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Customer infra compare detail API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra compare detail request failed: {str(e)}")
+
+    def get_customer_infra_compare_evaluation(self, playbook_id: str, plaintiff_id: str,
+                                              template_version: str = "v1.0") -> list:
+        """
+        Get aggregated model evaluation results for an EvenUp compare run.
+
+        Args:
+            playbook_id (str): EvenUp playbook ID used in the compare run
+            plaintiff_id (str): EvenUp plaintiff ID used in the compare run
+            template_version (str): Template version; defaults to "v1.0"
+
+        Returns:
+            list: List of per-model aggregated result objects including pass/fail counts
+                  and a winner flag
+        """
+        data = {
+            "templateId": playbook_id + "@" + plaintiff_id,
+            "templateVersion": template_version,
+        }
+        try:
+            response = requests.post(
+                self.template_compare_evaluation_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Customer infra compare evaluation API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra compare evaluation request failed: {str(e)}")
