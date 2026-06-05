@@ -9,6 +9,8 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch, call
 
+from insightfinderai.config import DEFAULT_API_URL
+
 
 MATTER_ID = "97c6bd47-10cf-4507-9479-d597f1d27855"
 PLAYBOOK_ID = "770e8400-e29b-41d4-a716-446655440002"
@@ -47,7 +49,7 @@ def _make_client():
          patch("requests.delete", return_value=_ok()):
         client = Client(
             session_name="test-session",
-            url="https://ai.insightfinder.com",
+            url=DEFAULT_API_URL,
             username="testuser",
             api_key="test-api-key",
         )
@@ -276,7 +278,7 @@ class TestGetCustomerInfraSettings(unittest.TestCase):
             "apiToken": "tok-abc",
             "modelList": [MODEL],
             "hmacSecret": "s3cr3t",
-            "webhookUrl": "https://ai.insightfinder.com/api/customer/webhook",
+            "webhookUrl": DEFAULT_API_URL + "/api/customer/webhook",
             "currentInfra": "Customer Infrastructure",
         }
         with patch("requests.get", return_value=_ok(settings)) as mock_get:
@@ -531,7 +533,7 @@ class TestEvenUpWebhookSimulation(unittest.TestCase):
 
     def _webhook_url(self) -> str:
         return os.environ.get(
-            "WEBHOOK_URL", "https://ai.insightfinder.com/api/customer/webhook"
+            "WEBHOOK_URL", DEFAULT_API_URL + "/api/customer/webhook"
         )
 
     def _secret(self) -> str:
