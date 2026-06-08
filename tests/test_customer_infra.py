@@ -62,25 +62,22 @@ class TestSendCustomerInfraCompare(unittest.TestCase):
         self.client = _make_client()
 
     def test_posts_composite_dataset_and_template_ids(self):
-        """datasetId = matter_id (SDK receives just matterId); templateId = playbookId@plaintiffId."""
-        with patch("requests.post", return_value=_ok(RUN_ID)) as mock_post, \
+        """datasetIds = [matter_id] (str auto-wrapped to list); templateId = playbookId@plaintiffId."""
+        with patch("requests.post", return_value=_ok([RUN_ID])) as mock_post, \
              patch.object(self.client, "_save_prompt_library"), \
              patch.object(self.client, "_save_datasets"):
-            run_id = self.client.send_customer_infra_compare(
+            run_ids = self.client.send_customer_infra_compare(
                 model=MODEL,
-                matter_id=MATTER_ID,
+                matter_ids=MATTER_ID,
                 plaintiff_id=PLAINTIFF_ID,
                 playbook_id=PLAYBOOK_ID,
             )
 
-        self.assertEqual(RUN_ID, run_id)
+        self.assertEqual([RUN_ID], run_ids)
         mock_post.assert_called_once()
-        _, kwargs = mock_post.call_args
-        body = kwargs.get("json") or mock_post.call_args[0][1] if len(mock_post.call_args[0]) > 1 else kwargs["json"]
-        # Access via kwargs
         posted = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
         self.assertEqual(MODEL, posted["model"])
-        self.assertEqual(MATTER_ID, posted["datasetId"])
+        self.assertEqual([MATTER_ID], posted["datasetIds"])
         self.assertEqual(f"{PLAYBOOK_ID}@{PLAINTIFF_ID}", posted["templateId"])
 
     def test_ingest_called_before_compare(self):
@@ -93,12 +90,12 @@ class TestSendCustomerInfraCompare(unittest.TestCase):
         def mock_save_ds(m):
             call_order.append("ds")
 
-        with patch("requests.post", return_value=_ok(RUN_ID)) as mock_post, \
+        with patch("requests.post", return_value=_ok([RUN_ID])) as mock_post, \
              patch.object(self.client, "_save_prompt_library", side_effect=mock_save_lib), \
              patch.object(self.client, "_save_datasets", side_effect=mock_save_ds):
             self.client.send_customer_infra_compare(
                 model=MODEL,
-                matter_id=MATTER_ID,
+                matter_ids=MATTER_ID,
                 plaintiff_id=PLAINTIFF_ID,
                 playbook_id=PLAYBOOK_ID,
             )
@@ -107,47 +104,6 @@ class TestSendCustomerInfraCompare(unittest.TestCase):
         self.assertIn("ds", call_order)
         self.assertLess(call_order.index("lib"), call_order.index("ds") + 1)
 
-    def test_optional_prompt_field_omitted_when_none(self):
-        with patch("requests.post", return_value=_ok(RUN_ID)), \
-             patch.object(self.client, "_save_prompt_library"), \
-             patch.object(self.client, "_save_datasets"):
-            self.client.send_customer_infra_compare(
-                model=MODEL,
-                matter_id=MATTER_ID,
-                plaintiff_id=PLAINTIFF_ID,
-                playbook_id=PLAYBOOK_ID,
-                prompt=None,
-            )
-
-        posted = patch("requests.post").__enter__  # already called; checked above
-        # Verify via side-effect capture instead
-        with patch("requests.post", return_value=_ok(RUN_ID)) as mock_post, \
-             patch.object(self.client, "_save_prompt_library"), \
-             patch.object(self.client, "_save_datasets"):
-            self.client.send_customer_infra_compare(
-                model=MODEL,
-                matter_id=MATTER_ID,
-                plaintiff_id=PLAINTIFF_ID,
-                playbook_id=PLAYBOOK_ID,
-                prompt=None,
-            )
-        sent = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
-        self.assertNotIn("prompt", sent)
-
-    def test_prompt_field_included_when_provided(self):
-        with patch("requests.post", return_value=_ok(RUN_ID)) as mock_post, \
-             patch.object(self.client, "_save_prompt_library"), \
-             patch.object(self.client, "_save_datasets"):
-            self.client.send_customer_infra_compare(
-                model=MODEL,
-                matter_id=MATTER_ID,
-                plaintiff_id=PLAINTIFF_ID,
-                playbook_id=PLAYBOOK_ID,
-                prompt="What was the date of injury?",
-            )
-        sent = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
-        self.assertEqual("What was the date of injury?", sent["prompt"])
-
     def test_api_error_raises_value_error(self):
         with patch("requests.post", return_value=_err(500, "internal server error")), \
              patch.object(self.client, "_save_prompt_library"), \
@@ -155,7 +111,7 @@ class TestSendCustomerInfraCompare(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 self.client.send_customer_infra_compare(
                     model=MODEL,
-                    matter_id=MATTER_ID,
+                    matter_ids=MATTER_ID,
                     plaintiff_id=PLAINTIFF_ID,
                     playbook_id=PLAYBOOK_ID,
                 )

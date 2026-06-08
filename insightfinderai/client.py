@@ -2024,34 +2024,35 @@ class Client:
         except requests.exceptions.RequestException as e:
             logger.warning("Failed to ingest matter %s: %s", matter_id, e)
 
-    def send_customer_infra_compare(self, model: str, matter_id: str, plaintiff_id: str,
-                                    playbook_id: str, prompt: str = None) -> str:
+    def send_customer_infra_compare(self, model: str, matter_ids, plaintiff_id: str,
+                                    playbook_id: str) -> list:
         """
-        Send a run request to the customer API for async processing.
+        Send run requests to the customer API for async processing, one per matter.
         The customer API will call back our webhook with results when done.
 
         Args:
             model (str): Customer model alias (e.g. "BEST_IN_CLASS", "GEMINI_2_5")
-            matter_id (str): Matter ID (dataset) in the customer system
+            matter_ids (str or list): One or more Matter IDs (datasets) in the customer system
             plaintiff_id (str): Plaintiff ID (sub-entry) in the customer system
             playbook_id (str): Playbook ID (prompt template) in the customer system
-            prompt (str, optional): Prompt text — used to generate promptId for tracking
 
         Returns:
-            str: run_id returned by the customer API for tracking the async result
+            list: run_ids returned by the customer API, one per matter
         """
+        if isinstance(matter_ids, str):
+            matter_ids = [matter_ids]
+
         if playbook_id and plaintiff_id:
             self._save_prompt_library(playbook_id, plaintiff_id)
-        if matter_id:
-            self._save_datasets(matter_id)
+        for mid in matter_ids:
+            if mid:
+                self._save_datasets(mid)
 
         data = {
             "model": model,
-            "datasetId": matter_id,
+            "datasetIds": matter_ids,
             "templateId": playbook_id + "@" + plaintiff_id,
         }
-        if prompt is not None:
-            data["prompt"] = prompt
         try:
             response = requests.post(
                 self.customer_infra_compare_url,
@@ -2060,7 +2061,7 @@ class Client:
             )
             if not (200 <= response.status_code < 300):
                 raise ValueError(f"Customer infra compare API error {response.status_code}: {response.text}")
-            return response.text
+            return response.json()
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Customer infra compare request failed: {str(e)}")
 
