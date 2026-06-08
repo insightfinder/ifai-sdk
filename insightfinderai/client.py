@@ -43,6 +43,8 @@ from .config import (
     CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT,
     CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT,
     CUSTOMER_INFRA_DATASETS_ENDPOINT,
+    CUSTOMER_INFRA_DATASET_UPLOAD_FIELDS_ENDPOINT,
+    CUSTOMER_INFRA_PROMPT_LIBRARY_UPLOAD_FIELDS_ENDPOINT,
 )
 from .model import (
     EvaluationResult,
@@ -185,6 +187,8 @@ class Client:
         self.customer_infra_ingest_matter_url = self.base_url + CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT
         self.customer_infra_matters_base_url = self.base_url + CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT
         self.customer_infra_datasets_url = self.base_url + CUSTOMER_INFRA_DATASETS_ENDPOINT
+        self.customer_infra_dataset_upload_fields_url = self.base_url + CUSTOMER_INFRA_DATASET_UPLOAD_FIELDS_ENDPOINT
+        self.customer_infra_prompt_library_upload_fields_url = self.base_url + CUSTOMER_INFRA_PROMPT_LIBRARY_UPLOAD_FIELDS_ENDPOINT
 
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
@@ -2120,3 +2124,41 @@ class Client:
             return response.json()
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Customer infra compare evaluation request failed: {str(e)}")
+
+    def get_customer_infra_dataset_upload_fields(self) -> list:
+        """
+        Get the field definitions for the dataset upload form.
+
+        Returns:
+            list: List of field objects with 'key' and 'label'. Empty when not on Customer Infrastructure.
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_dataset_upload_fields_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Dataset upload fields API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Dataset upload fields request failed: {str(e)}")
+
+    def get_customer_infra_prompt_library_upload_fields(self) -> list:
+        """
+        Get the field definitions for the prompt library upload form.
+
+        Returns:
+            list: List of field objects with 'key' and 'label'. Empty when not on Customer Infrastructure.
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_prompt_library_upload_fields_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Prompt library upload fields API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Prompt library upload fields request failed: {str(e)}")

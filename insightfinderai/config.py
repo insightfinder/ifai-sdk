@@ -53,3 +53,5 @@ CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT = "api/external/v1/customer-infra/ingest
 CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT = "api/external/v1/customer-infra/ingest-matter"
 CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT = "api/external/v1/customer-infra/matters"
 CUSTOMER_INFRA_DATASETS_ENDPOINT = "api/external/v1/customer-infra/customer-datasets"
+CUSTOMER_INFRA_DATASET_UPLOAD_FIELDS_ENDPOINT = "api/external/v1/customer-infra/dataset-upload-fields"
+CUSTOMER_INFRA_PROMPT_LIBRARY_UPLOAD_FIELDS_ENDPOINT = "api/external/v1/customer-infra/prompt-library-upload-fields"
