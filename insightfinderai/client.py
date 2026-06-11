@@ -1621,7 +1621,7 @@ class Client:
 
     def search_datasets(self, dataset_name: Optional[str] = None, sort_by: Optional[str] = None,
                         sort_order: Optional[str] = None, page_number: int = 0,
-                        page_size: int = 10) -> dict:
+                        page_size: int = 10, current_infra: Optional[str] = None) -> dict:
         """
         Search datasets with optional filtering and pagination.
 
@@ -1631,6 +1631,7 @@ class Client:
             sort_order (str, optional): "ascend" or "descend"
             page_number (int): Zero-based page index (default: 0)
             page_size (int): Number of results per page (default: 10)
+            current_infra (str, optional): Filter by infra type (e.g. "Customer Infrastructure")
 
         Returns:
             dict: Paginated result with dataset list
@@ -1642,6 +1643,8 @@ class Client:
             params["sortBy"] = sort_by
         if sort_order:
             params["sortOrder"] = sort_order
+        if current_infra:
+            params["currentInfra"] = current_infra
         try:
             response = requests.get(self.dataset_search_url, headers=self._get_headers(), params=params)
             if not (200 <= response.status_code < 300):
