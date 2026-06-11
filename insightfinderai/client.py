@@ -21,7 +21,30 @@ from .config import (
     ORG_TOKEN_USAGE_ENDPOINT,
     CREATE_SESSION_ENDPOINT,
     DELETE_SESSION_ENDPOINT,
-    SUPPORTED_MODELS_ENDPOINT
+    SUPPORTED_MODELS_ENDPOINT,
+    REAL_MODEL_LIST_SEARCH_ENDPOINT,
+    REAL_MODEL_LIST_SEARCH_WITH_DATASET_ENDPOINT,
+    DATASET_LIST_ENDPOINT,
+    DATASET_SEARCH_ENDPOINT,
+    PROMPT_TEMPLATE_VERSIONS_ENDPOINT,
+    PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT,
+    PROMPT_TEMPLATE_FROM_LIST_ENDPOINT,
+    PROMPT_TEMPLATE_BY_VERSION_ENDPOINT,
+    TEMPLATE_COMPARE_RUN_ENDPOINT,
+    TEMPLATE_COMPARE_DETAIL_ENDPOINT,
+    TEMPLATE_COMPARE_EVALUATION_ENDPOINT,
+    TEMPLATE_COMPARE_WINNER_ENDPOINT,
+    CUSTOMER_INFRA_OPTIONS_ENDPOINT,
+    CUSTOMER_INFRA_SETTINGS_ENDPOINT,
+    CUSTOMER_INFRA_SWITCH_ENDPOINT,
+    CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT,
+    CUSTOMER_INFRA_COMPARE_ENDPOINT,
+    CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT,
+    CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT,
+    CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT,
+    CUSTOMER_INFRA_DATASETS_ENDPOINT,
+    CUSTOMER_INFRA_DATASET_UPLOAD_FIELDS_ENDPOINT,
+    CUSTOMER_INFRA_PROMPT_LIBRARY_UPLOAD_FIELDS_ENDPOINT,
 )
 from .model import (
     EvaluationResult,
@@ -133,7 +156,40 @@ class Client:
         self.create_session_url = self.base_url + CREATE_SESSION_ENDPOINT
         self.delete_session_url = self.base_url + DELETE_SESSION_ENDPOINT
         self.supported_models_url = self.base_url + SUPPORTED_MODELS_ENDPOINT
-        
+
+        # Real model URLs
+        self.real_model_list_search_url = self.base_url + REAL_MODEL_LIST_SEARCH_ENDPOINT
+        self.real_model_list_search_with_dataset_url = self.base_url + REAL_MODEL_LIST_SEARCH_WITH_DATASET_ENDPOINT
+
+        # Dataset URLs
+        self.dataset_list_url = self.base_url + DATASET_LIST_ENDPOINT
+        self.dataset_search_url = self.base_url + DATASET_SEARCH_ENDPOINT
+
+        # Prompt template URLs
+        self.prompt_template_versions_url = self.base_url + PROMPT_TEMPLATE_VERSIONS_ENDPOINT
+        self.prompt_template_latest_prompts_url = self.base_url + PROMPT_TEMPLATE_LATEST_PROMPTS_ENDPOINT
+        self.prompt_template_from_list_url = self.base_url + PROMPT_TEMPLATE_FROM_LIST_ENDPOINT
+        self.prompt_template_by_version_url = self.base_url + PROMPT_TEMPLATE_BY_VERSION_ENDPOINT
+
+        # Template compare URLs
+        self.template_compare_run_url = self.base_url + TEMPLATE_COMPARE_RUN_ENDPOINT
+        self.template_compare_detail_url = self.base_url + TEMPLATE_COMPARE_DETAIL_ENDPOINT
+        self.template_compare_evaluation_url = self.base_url + TEMPLATE_COMPARE_EVALUATION_ENDPOINT
+        self.template_compare_winner_url = self.base_url + TEMPLATE_COMPARE_WINNER_ENDPOINT
+
+        # Customer infrastructure URLs
+        self.customer_infra_options_url = self.base_url + CUSTOMER_INFRA_OPTIONS_ENDPOINT
+        self.customer_infra_settings_url = self.base_url + CUSTOMER_INFRA_SETTINGS_ENDPOINT
+        self.customer_infra_switch_url = self.base_url + CUSTOMER_INFRA_SWITCH_ENDPOINT
+        self.customer_infra_verify_token_url = self.base_url + CUSTOMER_INFRA_VERIFY_TOKEN_ENDPOINT
+        self.customer_infra_compare_url = self.base_url + CUSTOMER_INFRA_COMPARE_ENDPOINT
+        self.customer_infra_ingest_playbook_url = self.base_url + CUSTOMER_INFRA_INGEST_PLAYBOOK_ENDPOINT
+        self.customer_infra_ingest_matter_url = self.base_url + CUSTOMER_INFRA_INGEST_MATTER_ENDPOINT
+        self.customer_infra_matters_base_url = self.base_url + CUSTOMER_INFRA_MATTERS_BASE_ENDPOINT
+        self.customer_infra_datasets_url = self.base_url + CUSTOMER_INFRA_DATASETS_ENDPOINT
+        self.customer_infra_dataset_upload_fields_url = self.base_url + CUSTOMER_INFRA_DATASET_UPLOAD_FIELDS_ENDPOINT
+        self.customer_infra_prompt_library_upload_fields_url = self.base_url + CUSTOMER_INFRA_PROMPT_LIBRARY_UPLOAD_FIELDS_ENDPOINT
+
         # Cache for project names to avoid repeated API calls
         self._project_name_cache: Dict[str, str] = {}
         
@@ -1463,3 +1519,650 @@ class Client:
         except requests.exceptions.RequestException as e:
             logger.error(f"Error deleting session: {str(e)}")
             return False
+
+    # ---------------------------------------------------------------------------
+    # Real model search
+    # ---------------------------------------------------------------------------
+
+    def search_models(self, page_number: int = 0, page_size: int = 10,
+                      model_name: Optional[str] = None, archived: bool = False,
+                      sort_by: str = "lastUpdateTime", sort_order: str = "descend") -> dict:
+        """
+        Search LLM Lab models with pagination and filtering.
+
+        Args:
+            page_number (int): Zero-based page index (default: 0)
+            page_size (int): Number of results per page (default: 10)
+            model_name (str, optional): Filter by model name substring
+            archived (bool): Include archived models (default: False)
+            sort_by (str): Field to sort by (default: "lastUpdateTime")
+            sort_order (str): "ascend" or "descend" (default: "descend")
+
+        Returns:
+            dict: Paginated result with model list
+        """
+        params = {
+            "pageNumber": page_number,
+            "pageSize": page_size,
+            "archived": str(archived).lower(),
+            "sortBy": sort_by,
+            "sortOrder": sort_order,
+        }
+        if model_name:
+            params["modelName"] = model_name
+        try:
+            response = requests.get(self.real_model_list_search_url, headers=self._get_headers(), params=params)
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model list search API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Model list search request failed: {str(e)}")
+
+    def search_models_with_dataset(self, page_number: int = 0, page_size: int = 10,
+                                   model_name: Optional[str] = None, archived: bool = False,
+                                   sort_by: str = "lastUpdateTime", sort_order: str = "descend",
+                                   template_id: Optional[str] = None,
+                                   template_versions: Optional[List[str]] = None) -> dict:
+        """
+        Search LLM Lab models filtered by prompt template/dataset with pagination.
+
+        Args:
+            page_number (int): Zero-based page index (default: 0)
+            page_size (int): Number of results per page (default: 10)
+            model_name (str, optional): Filter by model name substring
+            archived (bool): Include archived models (default: False)
+            sort_by (str): Field to sort by (default: "lastUpdateTime")
+            sort_order (str): "ascend" or "descend" (default: "descend")
+            template_id (str, optional): Filter by prompt template ID
+            template_versions (List[str], optional): Filter by specific template versions
+
+        Returns:
+            dict: Paginated result with model list
+        """
+        params = {
+            "pageNumber": page_number,
+            "pageSize": page_size,
+            "archived": str(archived).lower(),
+            "sortBy": sort_by,
+            "sortOrder": sort_order,
+        }
+        if model_name:
+            params["modelName"] = model_name
+        if template_id:
+            params["templateId"] = template_id
+        if template_versions:
+            params["templateVersion"] = template_versions  # requests repeats the param for each item
+        try:
+            response = requests.get(self.real_model_list_search_with_dataset_url, headers=self._get_headers(), params=params)
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Model list search with dataset API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Model list search with dataset request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Datasets
+    # ---------------------------------------------------------------------------
+
+    def list_datasets(self) -> list:
+        """
+        List all datasets for the current user.
+
+        Returns:
+            list: List of dataset metadata objects
+        """
+        try:
+            response = requests.get(self.dataset_list_url, headers=self._get_headers())
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Dataset list API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Dataset list request failed: {str(e)}")
+
+    def search_datasets(self, dataset_name: Optional[str] = None, sort_by: Optional[str] = None,
+                        sort_order: Optional[str] = None, page_number: int = 0,
+                        page_size: int = 10, current_infra: Optional[str] = None) -> dict:
+        """
+        Search datasets with optional filtering and pagination.
+
+        Args:
+            dataset_name (str, optional): Filter by dataset name substring
+            sort_by (str, optional): Field to sort by
+            sort_order (str, optional): "ascend" or "descend"
+            page_number (int): Zero-based page index (default: 0)
+            page_size (int): Number of results per page (default: 10)
+            current_infra (str, optional): Filter by infra type (e.g. "Customer Infrastructure")
+
+        Returns:
+            dict: Paginated result with dataset list
+        """
+        params = {"pageNumber": page_number, "pageSize": page_size}
+        if dataset_name:
+            params["datasetName"] = dataset_name
+        if sort_by:
+            params["sortBy"] = sort_by
+        if sort_order:
+            params["sortOrder"] = sort_order
+        if current_infra:
+            params["currentInfra"] = current_infra
+        try:
+            response = requests.get(self.dataset_search_url, headers=self._get_headers(), params=params)
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Dataset search API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Dataset search request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Prompt templates
+    # ---------------------------------------------------------------------------
+
+    def get_prompt_template_versions(self, template_id: str) -> list:
+        """
+        Get all versions and their contents for a prompt template.
+
+        Args:
+            template_id (str): The prompt template ID
+
+        Returns:
+            list: List of version objects with content
+        """
+        if not template_id:
+            raise ValueError("template_id cannot be empty")
+        try:
+            response = requests.get(
+                self.prompt_template_versions_url,
+                headers=self._get_headers(),
+                params={"templateId": template_id}
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Prompt template versions API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Prompt template versions request failed: {str(e)}")
+
+    def get_latest_prompt_templates(self, template_name: Optional[str] = None,
+                                    page_size: int = 10, page_number: int = 0,
+                                    sort_by: Optional[str] = None,
+                                    sort_order: Optional[str] = None,
+                                    type: Optional[str] = None) -> dict:
+        """
+        Get the latest version of prompt templates with pagination.
+
+        Args:
+            template_name (str, optional): Filter by template name substring
+            page_size (int): Number of results per page (default: 10)
+            page_number (int): Zero-based page index (default: 0)
+            sort_by (str, optional): Field to sort by
+            sort_order (str, optional): "ascend" or "descend"
+            type (str, optional): Filter by template type (comma-separated values accepted)
+
+        Returns:
+            dict: Paginated result with latest-version prompt templates
+        """
+        params = {"pageSize": page_size, "pageNumber": page_number}
+        if template_name:
+            params["templateName"] = template_name
+        if sort_by:
+            params["sortBy"] = sort_by
+        if sort_order:
+            params["sortOrder"] = sort_order
+        if type:
+            params["type"] = type
+        try:
+            response = requests.get(
+                self.prompt_template_latest_prompts_url,
+                headers=self._get_headers(),
+                params=params
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Latest prompt templates API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Latest prompt templates request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Template compare
+    # ---------------------------------------------------------------------------
+
+    def run_template_compare(self, template_id: str, template_version: str,
+                             prompt: str, model_type: str, model_version: str,
+                             template_username: Optional[str] = None,
+                             user_created_model_name: Optional[str] = None,
+                             dataset_id: Optional[str] = None,
+                             dataset_username: Optional[str] = None,
+                             model_username: Optional[str] = None,
+                             aws_region: Optional[str] = None,
+                             aws_bedrock_model_id: Optional[str] = None,
+                             stream: bool = False) -> str:
+        """
+        Run a template comparison for a single model. Call once per model being compared.
+        Returns the full accumulated response text from the SSE stream.
+
+        Args:
+            template_id (str): Prompt template ID to compare
+            template_version (str): Template version to use
+            prompt (str): The prompt to send
+            model_type (str): Model type (e.g. "OpenAI")
+            model_version (str): Model version (e.g. "gpt-4o")
+            template_username (str, optional): Owner of the template (defaults to current user)
+            user_created_model_name (str, optional): User-created model name if using LLM Labs model
+            dataset_id (str, optional): Dataset ID to associate with this comparison
+            dataset_username (str, optional): Owner of the dataset
+            model_username (str, optional): Owner of the model
+            aws_region (str, optional): AWS region for Bedrock models
+            aws_bedrock_model_id (str, optional): Bedrock model ID
+            stream (bool): Print chunks to stdout as they arrive (default: False)
+
+        Returns:
+            str: Full response text
+        """
+        data = {
+            "templateUsername": template_username or self.username,
+            "templateId": template_id,
+            "templateVersion": template_version,
+            "prompt": prompt,
+            "modelType": model_type,
+            "modelVersion": model_version,
+        }
+        if user_created_model_name:
+            data["userCreatedModelName"] = user_created_model_name
+        if dataset_id:
+            data["dataSetId"] = dataset_id
+        if dataset_username:
+            data["dataSetUsername"] = dataset_username
+        if model_username:
+            data["modelUsername"] = model_username
+        if aws_region:
+            data["awsRegion"] = aws_region
+        if aws_bedrock_model_id:
+            data["awsBedrockModelId"] = aws_bedrock_model_id
+
+        try:
+            response = requests.post(
+                self.template_compare_run_url,
+                headers=self._get_headers(),
+                json=data,
+                stream=True
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Template compare API error {response.status_code}: {response.text}")
+
+            result = ""
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or line.startswith("event:"):
+                    continue
+                if line.startswith("data:"):
+                    content = line[5:].strip()
+                    if content in ("[START]", "[END]"):
+                        continue
+                    try:
+                        chunk = json.loads(content)
+                        for choice in chunk.get("choices", []):
+                            delta_content = choice.get("delta", {}).get("content", "")
+                            if delta_content:
+                                result += delta_content
+                                if stream:
+                                    print(delta_content, end="", flush=True)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+            return result
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Template compare request failed: {str(e)}")
+
+    def get_template_compare_evaluation(self, user_name: str, template_id: str,
+                                        template_version: str) -> list:
+        """
+        Get evaluation results for a template comparison run.
+
+        Args:
+            user_name (str): The user who owns the template compare data
+            template_id (str): Prompt template ID
+            template_version (str): Template version
+
+        Returns:
+            list: List of model evaluation result objects
+        """
+        data = {
+            "userName": user_name,
+            "templateId": template_id,
+            "templateVersion": template_version
+        }
+        try:
+            response = requests.post(
+                self.template_compare_evaluation_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Template compare evaluation API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Template compare evaluation request failed: {str(e)}")
+
+    def get_template_compare_winner(self, template_id: str) -> dict:
+        """
+        Get the winning model for a template comparison.
+
+        Args:
+            template_id (str): Prompt template ID
+
+        Returns:
+            dict: Template compare winner detail
+        """
+        if not template_id:
+            raise ValueError("template_id cannot be empty")
+        try:
+            response = requests.get(
+                self.template_compare_winner_url,
+                headers=self._get_headers(),
+                params={"templateId": template_id}
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Template compare winner API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Template compare winner request failed: {str(e)}")
+
+    # ---------------------------------------------------------------------------
+    # Customer infrastructure
+    # ---------------------------------------------------------------------------
+
+    def get_customer_infra_options(self) -> list:
+        """
+        Get the list of available infrastructure options.
+
+        Returns:
+            list: e.g. ["InsightFinder Infrastructure", "Customer Infrastructure"]
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_options_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Customer infra options API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra options request failed: {str(e)}")
+
+    def get_customer_infra_settings(self) -> dict:
+        """
+        Get the saved customer infrastructure settings for the current user,
+        including the read-only webhookUrl.
+
+        Returns:
+            dict: Settings including apiBaseUrl, apiToken, modelList, hmacSecret,
+                  webhookUrl, and currentInfra
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_settings_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Customer infra settings API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra settings request failed: {str(e)}")
+
+    def save_customer_infra_settings(self, api_base_url: str, api_token: str,
+                                     model_list: List[str], hmac_secret: str) -> bool:
+        """
+        Save customer infrastructure settings and auto-create LLM Lab models for each alias.
+
+        Args:
+            api_base_url (str): Base URL of the customer API
+            api_token (str): Bearer token for authenticating with the customer API
+            model_list (List[str]): List of model alias strings (e.g. ["BEST_IN_CLASS", "GEMINI_2_5"])
+            hmac_secret (str): HMAC secret for verifying webhook callbacks
+
+        Returns:
+            bool: True if saved successfully
+        """
+        data = {
+            "apiBaseUrl": api_base_url,
+            "apiToken": api_token,
+            "modelList": model_list,
+            "hmacSecret": hmac_secret,
+        }
+        try:
+            response = requests.post(
+                self.customer_infra_settings_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Save customer infra settings API error {response.status_code}: {response.text}")
+            return True
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Save customer infra settings request failed: {str(e)}")
+
+    def switch_customer_infra(self, infra_type: str) -> bool:
+        """
+        Switch the active infrastructure for the current user.
+
+        Args:
+            infra_type (str): "InsightFinder Infrastructure" or "Customer Infrastructure"
+
+        Returns:
+            bool: True if switched successfully
+        """
+        data = {"infraType": infra_type}
+        try:
+            response = requests.post(
+                self.customer_infra_switch_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Switch infra API error {response.status_code}: {response.text}")
+            return True
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Switch infra request failed: {str(e)}")
+
+    def verify_customer_infra_token(self) -> bool:
+        """
+        Verify that the stored customer API token is valid by calling the health endpoint.
+
+        Returns:
+            bool: True if the token is valid and the customer API is reachable
+        """
+        try:
+            response = requests.post(
+                self.customer_infra_verify_token_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Verify token API error {response.status_code}: {response.text}")
+            result = response.json()
+            return result.get("valid", False)
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Verify token request failed: {str(e)}")
+
+    def get_customer_datasets(self, current_infra: str = "Customer Infrastructure") -> dict:
+        """
+        Returns customer infra datasets grouped by matter:
+        { "matterId": ["matterId@annotationFileId", ...], ... }
+        Only populated when current_infra is "Customer Infrastructure".
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_datasets_url,
+                headers=self._get_headers(),
+                params={"currentInfra": current_infra}
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Get customer datasets error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Get customer datasets request failed: {str(e)}")
+
+    def _save_prompt_library(self, playbook_id: str, plaintiff_id: str) -> None:
+        try:
+            resp = requests.post(
+                self.customer_infra_ingest_playbook_url,
+                headers=self._get_headers(),
+                json={"playbookId": playbook_id, "plaintiffId": plaintiff_id}
+            )
+            if not (200 <= resp.status_code < 300):
+                logger.warning("Failed to ingest playbook %s@%s: %s", playbook_id, plaintiff_id, resp.text)
+            else:
+                logger.info("Ingested prompt library %s@%s", playbook_id, plaintiff_id)
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to ingest playbook %s@%s: %s", playbook_id, plaintiff_id, e)
+
+    def _save_datasets(self, matter_id: str) -> None:
+        try:
+            resp = requests.post(
+                self.customer_infra_ingest_matter_url,
+                headers=self._get_headers(),
+                json={"matterId": matter_id}
+            )
+            if not (200 <= resp.status_code < 300):
+                logger.warning("Failed to ingest matter %s: %s", matter_id, resp.text)
+            else:
+                logger.info("Ingested matter %s", matter_id)
+        except requests.exceptions.RequestException as e:
+            logger.warning("Failed to ingest matter %s: %s", matter_id, e)
+
+    def send_customer_infra_compare(self, model: str, matter_ids, plaintiff_id: str,
+                                    playbook_id: str) -> list:
+        """
+        Send run requests to the customer API for async processing, one per matter.
+        The customer API will call back our webhook with results when done.
+
+        Args:
+            model (str): Customer model alias (e.g. "BEST_IN_CLASS", "GEMINI_2_5")
+            matter_ids (str or list): One or more Matter IDs (datasets) in the customer system
+            plaintiff_id (str): Plaintiff ID (sub-entry) in the customer system
+            playbook_id (str): Playbook ID (prompt template) in the customer system
+
+        Returns:
+            list: run_ids returned by the customer API, one per matter
+        """
+        if isinstance(matter_ids, str):
+            matter_ids = [matter_ids]
+
+        if playbook_id and plaintiff_id:
+            self._save_prompt_library(playbook_id, plaintiff_id)
+        for mid in matter_ids:
+            if mid:
+                self._save_datasets(mid)
+
+        data = {
+            "model": model,
+            "datasetIds": matter_ids,
+            "templateId": playbook_id + "@" + plaintiff_id,
+        }
+        try:
+            response = requests.post(
+                self.customer_infra_compare_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(f"Customer infra compare API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra compare request failed: {str(e)}")
+
+    def get_customer_infra_compare_detail(self, playbook_id: str, plaintiff_id: str,
+                                          template_version: str = "v1.0") -> list:
+        """
+        Get raw per-prompt comparison rows for an EvenUp compare run.
+
+        Args:
+            playbook_id (str): EvenUp playbook ID used in the compare run
+            plaintiff_id (str): EvenUp plaintiff ID used in the compare run
+            template_version (str): Template version; defaults to "v1.0"
+
+        Returns:
+            list: List of per-prompt result objects (prompt, response, judge scores)
+        """
+        data = {
+            "templateId": playbook_id + "@" + plaintiff_id,
+            "templateVersion": template_version,
+        }
+        try:
+            response = requests.post(
+                self.template_compare_detail_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Customer infra compare detail API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra compare detail request failed: {str(e)}")
+
+    def get_customer_infra_compare_evaluation(self, playbook_id: str, plaintiff_id: str,
+                                              template_version: str = "v1.0") -> list:
+        """
+        Get aggregated model evaluation results for an EvenUp compare run.
+
+        Args:
+            playbook_id (str): EvenUp playbook ID used in the compare run
+            plaintiff_id (str): EvenUp plaintiff ID used in the compare run
+            template_version (str): Template version; defaults to "v1.0"
+
+        Returns:
+            list: List of per-model aggregated result objects including pass/fail counts
+                  and a winner flag
+        """
+        data = {
+            "templateId": playbook_id + "@" + plaintiff_id,
+            "templateVersion": template_version,
+        }
+        try:
+            response = requests.post(
+                self.template_compare_evaluation_url,
+                headers=self._get_headers(),
+                json=data
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Customer infra compare evaluation API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Customer infra compare evaluation request failed: {str(e)}")
+
+    def get_customer_infra_dataset_upload_fields(self) -> list:
+        """
+        Get the field definitions for the dataset upload form.
+
+        Returns:
+            list: List of field objects with 'key' and 'label'. Empty when not on Customer Infrastructure.
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_dataset_upload_fields_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Dataset upload fields API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Dataset upload fields request failed: {str(e)}")
+
+    def get_customer_infra_prompt_library_upload_fields(self) -> list:
+        """
+        Get the field definitions for the prompt library upload form.
+
+        Returns:
+            list: List of field objects with 'key' and 'label'. Empty when not on Customer Infrastructure.
+        """
+        try:
+            response = requests.get(
+                self.customer_infra_prompt_library_upload_fields_url,
+                headers=self._get_headers()
+            )
+            if not (200 <= response.status_code < 300):
+                raise ValueError(
+                    f"Prompt library upload fields API error {response.status_code}: {response.text}")
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Prompt library upload fields request failed: {str(e)}")

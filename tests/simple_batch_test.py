@@ -8,7 +8,7 @@ from insightfinderai import Client
 client = Client(
     session_name="",
     username="",
-    api_key="",
+    api_key="", 
     enable_chat_evaluation=True
 )
 
