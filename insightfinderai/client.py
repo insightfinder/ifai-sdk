@@ -2041,9 +2041,12 @@ class Client:
         if matter_id:
             self._save_datasets(matter_id)
 
+        # Backend CustomerRunRequestDTO expects `datasetIds` (a list). It extracts the
+        # matter id from each entry and runs once per distinct matter, pulling the whole
+        # matter's dataset group for coverage — so a single matter id here is sufficient.
         data = {
             "model": model,
-            "datasetId": matter_id,
+            "datasetIds": [matter_id],
             "templateId": playbook_id + "@" + plaintiff_id,
         }
         if prompt is not None:
