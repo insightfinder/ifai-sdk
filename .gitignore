@@ -193,3 +193,6 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 .vscode
+
+tests/test_evenup_e2e_mock.py
+test_run.sh
