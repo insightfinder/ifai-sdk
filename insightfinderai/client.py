@@ -2053,7 +2053,7 @@ class Client:
 
         data = {
             "model": model,
-            "datasetIds": matter_ids,
+            "datasetId": matter_ids,
             "templateId": playbook_id + "@" + plaintiff_id,
         }
         try:
